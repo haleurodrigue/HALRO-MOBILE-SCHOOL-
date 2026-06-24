@@ -29,6 +29,8 @@ interface AdminPortalProps {
   onResolvePayout: (requestId: string, invoice: Invoice) => void;
   onUpdateSuperAdminCode: (newCode: string) => void;
   onUpdateProductionLock: (lock: "none" | "student" | "teacher" | "admin") => void;
+  onAddCourse: (newCourse: Course) => void;
+  onUpdateCourses: (updated: Course[]) => void;
 }
 
 export default function AdminPortal({
@@ -47,14 +49,16 @@ export default function AdminPortal({
   onUpdateCodes,
   onResolvePayout,
   onUpdateSuperAdminCode,
-  onUpdateProductionLock
+  onUpdateProductionLock,
+  onAddCourse,
+  onUpdateCourses
 }: AdminPortalProps) {
   const [password, setPassword] = useState("");
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [loginError, setLoginError] = useState("");
 
-  // Tabs: 'dashboard' | 'classes' | 'teachers' | 'student-codes' | 'payouts' | 'settings'
-  const [activeTab, setActiveTab] = useState<"dashboard" | "classes" | "teachers" | "student-codes" | "payouts" | "settings">("dashboard");
+  // Tabs: 'dashboard' | 'classes' | 'teachers' | 'courses' | 'student-codes' | 'payouts' | 'settings'
+  const [activeTab, setActiveTab] = useState<"dashboard" | "classes" | "teachers" | "courses" | "student-codes" | "payouts" | "settings">("dashboard");
 
   // Input states
   const [className, setClassName] = useState("");
@@ -71,6 +75,13 @@ export default function AdminPortal({
   const [tPermCourses, setTPermCourses] = useState(true);
   const [tPermStudents, setTPermStudents] = useState(false);
   const [teacherSuccess, setTeacherSuccess] = useState("");
+
+  // Course Management states
+  const [adminCourseTitle, setAdminCourseTitle] = useState("");
+  const [adminCourseClassId, setAdminCourseClassId] = useState("");
+  const [adminCourseAuthorMatricule, setAdminCourseAuthorMatricule] = useState(""); // empty means Administration
+  const [adminCourseContentPages, setAdminCourseContentPages] = useState<string[]>([""]);
+  const [adminCourseSuccess, setAdminCourseSuccess] = useState("");
 
   const [studMatricule, setStudMatricule] = useState("");
   const [codeType, setCodeType] = useState<AccessCodeType>("definitive");
@@ -214,6 +225,65 @@ export default function AdminPortal({
     setTWhatsapp("");
     setTMobileMoney("");
     setTimeout(() => setTeacherSuccess(""), 5000);
+  };
+
+  // Handle Admin adding course
+  const handleAddNewCourseByAdmin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminCourseSuccess("");
+
+    if (!adminCourseTitle.trim()) {
+      alert("Le titre du cours est requis.");
+      return;
+    }
+
+    if (!adminCourseClassId) {
+      alert("Veuillez sélectionner une classe.");
+      return;
+    }
+
+    // Determine author info
+    let authorId = "ADMIN";
+    let authorName = "Direction Générale";
+
+    if (adminCourseAuthorMatricule) {
+      const assignedTeacher = teachers.find(t => t.matricule === adminCourseAuthorMatricule);
+      if (assignedTeacher) {
+        authorId = assignedTeacher.matricule;
+        authorName = `M. ${assignedTeacher.name} ${assignedTeacher.surname}`;
+      }
+    }
+
+    // Clean up empty content pages, and make sure we have at least one page
+    const filteredPages = adminCourseContentPages.map(p => p.trim()).filter(p => p.length > 0);
+    const pagesToSave = filteredPages.length > 0 ? filteredPages : ["Support de cours - PDF sécurisé."];
+
+    const newCourse: Course = {
+      id: "course-" + Math.floor(1000 + Math.random() * 9000),
+      classId: adminCourseClassId,
+      title: adminCourseTitle.trim(),
+      authorId,
+      authorName,
+      content: pagesToSave,
+      createdAt: new Date().toISOString()
+    };
+
+    onAddCourse(newCourse);
+    setAdminCourseSuccess(`Le cours "${adminCourseTitle.trim()}" a été créé avec succès !`);
+    setAdminCourseTitle("");
+    setAdminCourseClassId("");
+    setAdminCourseAuthorMatricule("");
+    setAdminCourseContentPages([""]);
+    setTimeout(() => setAdminCourseSuccess(""), 5000);
+  };
+
+  // Handle Admin deleting course
+  const handleDeleteCourseByAdmin = (courseId: string) => {
+    const confirm = window.confirm("Êtes-vous sûr de vouloir supprimer définitivement ce cours ?");
+    if (!confirm) return;
+
+    const updated = courses.filter(c => c.id !== courseId);
+    onUpdateCourses(updated);
   };
 
   // Handle generating code & distributing commission
@@ -474,6 +544,22 @@ export default function AdminPortal({
         >
           <Users size={14} />
           <span>Gérer les Enseignants</span>
+        </button>
+
+        <button
+          id="btn-tab-courses"
+          onClick={() => { setActiveTab("courses"); setViewedCourse(null); }}
+          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition ${
+            activeTab === "courses" ? "bg-red-600 text-white" : "text-slate-400 hover:bg-slate-850 hover:text-slate-200"
+          }`}
+        >
+          <div className="flex items-center space-x-2.5">
+            <FileText size={14} />
+            <span>Gestion des Cours</span>
+          </div>
+          <span className="bg-slate-950 text-slate-400 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+            {courses.length}
+          </span>
         </button>
 
         <button
@@ -884,6 +970,237 @@ export default function AdminPortal({
               </div>
             </div>
 
+          </div>
+        ) : activeTab === "courses" ? (
+          /* TAB: COURSES MANAGEMENT BY ADMIN */
+          <div className="space-y-6 animate-fade-in">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg">
+              <h4 className="text-sm font-bold uppercase tracking-wider text-slate-300 mb-4 flex items-center space-x-2">
+                <PlusCircle size={16} className="text-red-400" />
+                <span>Publier un Nouveau Cours (PDF)</span>
+              </h4>
+
+              <form onSubmit={handleAddNewCourseByAdmin} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 mb-1">Titre du cours (PDF)</label>
+                    <input
+                      id="admin-course-title-input"
+                      type="text"
+                      value={adminCourseTitle}
+                      onChange={(e) => setAdminCourseTitle(e.target.value)}
+                      placeholder="Ex: Chimie - Réactions d'Oxydoréduction"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-lg text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 mb-1">Classe de destination</label>
+                    <select
+                      id="admin-course-class-select"
+                      value={adminCourseClassId}
+                      onChange={(e) => setAdminCourseClassId(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-lg text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-red-500"
+                      required
+                    >
+                      <option value="">-- Sélectionner la Classe --</option>
+                      {classes.map(cl => (
+                        <option key={cl.id} value={cl.id}>{cl.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                    Affecter un Enseignant (Facultatif - Permet de lui verser des commissions automatiques)
+                  </label>
+                  <select
+                    id="admin-course-teacher-select"
+                    value={adminCourseAuthorMatricule}
+                    onChange={(e) => setAdminCourseAuthorMatricule(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-lg text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-red-500"
+                  >
+                    <option value="">-- Aucun / Administrateur (Aucune commission reversée) --</option>
+                    {teachers.map(t => (
+                      <option key={t.id} value={t.matricule}>
+                        {t.name} {t.surname} ({t.matricule})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Si un enseignant est sélectionné, chaque activation d'élève pour cette classe lui rapportera automatiquement sa commission.
+                  </p>
+                </div>
+
+                {/* Drag-and-drop / File Upload Mock Zone */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                    Fichier de support de cours (Simulation Drag & Drop ou Importation PDF)
+                  </label>
+                  <div 
+                    className="border-2 border-dashed border-slate-800 hover:border-indigo-500/50 rounded-xl p-6 text-center cursor-pointer transition bg-slate-950/40 relative group"
+                    onClick={() => {
+                      // Simulating picking a file
+                      const dummyTitles = [
+                        "Physique_Bac_Correction_Sujet_Série.pdf",
+                        "SVT_Anatomie_et_Nutrition_Terminales.pdf",
+                        "Mathematiques_Derivees_Premieres.pdf",
+                        "Philosophie_Rene_Descartes_Essais.pdf"
+                      ];
+                      const randomTitle = dummyTitles[Math.floor(Math.random() * dummyTitles.length)];
+                      if (!adminCourseTitle) {
+                        setAdminCourseTitle(randomTitle.replace(".pdf", "").replace(/_/g, " "));
+                      }
+                      const dummyContent = [
+                        `Page 1: Chapitre Spécial • Extrait de document importé du fichier ${randomTitle}\n\nCe support pédagogique est entièrement protégé par filigrane dynamique afin d'empêcher les copies ou reproductions illicites. Le code de l'élève qui étudie ce document y est gravé de manière indélébile.`,
+                        `Page 2: Exercices d'application pratiques du cours.\n\nFaites les exercices de fin de chapitre. Résolution demandée pour la prochaine évaluation.`
+                      ];
+                      setAdminCourseContentPages(dummyContent);
+                      alert(`📄 PDF Simulé avec succès : "${randomTitle}" importé et formaté en pages protégées.`);
+                    }}
+                  >
+                    <div className="space-y-2">
+                      <div className="mx-auto w-10 h-10 bg-indigo-500/10 text-indigo-400 rounded-lg flex items-center justify-center group-hover:scale-105 transition">
+                        <FileText size={20} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-300">Glisser-déposer votre fichier PDF ici, ou cliquer pour parcourir</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Le fichier sera converti et crypté automatiquement (Max 25 Mo)</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Multi-page editor (just like teachers) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-slate-300">
+                      Contenu écrit des Pages du Cours (Saisie alternative)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setAdminCourseContentPages([...adminCourseContentPages, ""])}
+                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 font-bold rounded transition flex items-center space-x-1"
+                    >
+                      <span>+ Ajouter une page</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {adminCourseContentPages.map((pageText, pageIndex) => (
+                      <div key={pageIndex} className="bg-slate-950 p-3 rounded-lg border border-slate-850 space-y-1.5">
+                        <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                          <span>Page {pageIndex + 1}</span>
+                          {adminCourseContentPages.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = adminCourseContentPages.filter((_, idx) => idx !== pageIndex);
+                                setAdminCourseContentPages(updated);
+                              }}
+                              className="text-red-400 hover:text-red-300 transition"
+                            >
+                              Supprimer la page
+                            </button>
+                          )}
+                        </div>
+                        <textarea
+                          rows={3}
+                          value={pageText}
+                          onChange={(e) => {
+                            const updated = [...adminCourseContentPages];
+                            updated[pageIndex] = e.target.value;
+                            setAdminCourseContentPages(updated);
+                          }}
+                          placeholder={`Entrez le contenu de la page ${pageIndex + 1} du cours sécurisé...`}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-850 rounded text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {adminCourseSuccess && (
+                  <p className="text-xs text-emerald-400 font-semibold">{adminCourseSuccess}</p>
+                )}
+
+                <button
+                  id="admin-course-submit"
+                  type="submit"
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs transition"
+                >
+                  Publier ce cours sécurisé
+                </button>
+              </form>
+            </div>
+
+            {/* Courses List */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg">
+              <h4 className="text-sm font-bold uppercase tracking-wider text-slate-300 mb-4">
+                Catalogue Général des Cours ({courses.length})
+              </h4>
+
+              {courses.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  <FileText size={32} className="mx-auto text-slate-700 mb-2" />
+                  <p className="text-xs">Aucun cours publié dans la base de données.</p>
+                  <p className="text-[10px] text-slate-600 mt-1">Utilisez le formulaire ci-dessus pour ajouter des cours.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400">
+                        <th className="py-2">Titre du Cours</th>
+                        <th className="py-2">Classe</th>
+                        <th className="py-2">Auteur assigné (Matricule)</th>
+                        <th className="py-2">Nombre de Pages</th>
+                        <th className="py-2 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-850">
+                      {courses.map(course => {
+                        const courseClass = classes.find(cl => cl.id === course.classId);
+                        return (
+                          <tr key={course.id} className="hover:bg-slate-850/30">
+                            <td className="py-3 font-semibold text-slate-200">{course.title}</td>
+                            <td className="py-3">
+                              <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-[10px] text-indigo-400 font-bold">
+                                {courseClass ? courseClass.name : course.classId}
+                              </span>
+                            </td>
+                            <td className="py-3 font-mono font-medium">
+                              {course.authorId === "ADMIN" ? (
+                                <span className="text-slate-400 italic font-medium">Direction Générale</span>
+                              ) : (
+                                <span className="text-emerald-400 font-bold">{course.authorName} ({course.authorId})</span>
+                              )}
+                            </td>
+                            <td className="py-3 font-mono text-slate-300">{course.content.length} page(s)</td>
+                            <td className="py-3 text-right space-x-2">
+                              <button
+                                onClick={() => setViewedCourse(course)}
+                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold border border-slate-700 transition"
+                              >
+                                Apercevoir
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCourseByAdmin(course.id)}
+                                className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/60 text-red-400 rounded text-[10px] font-bold border border-red-900/20 transition"
+                              >
+                                Supprimer
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         ) : activeTab === "student-codes" ? (
           /* TAB 4: ACCESS CODES GENERATION & REVIEW */

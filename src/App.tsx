@@ -33,6 +33,7 @@ export default function App() {
   const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [superAdminCode, setSuperAdminCode] = useState("admin1234");
+  const [isLoaded, setIsLoaded] = useState(false);
 
   // Simulated Device State
   const [currentDeviceId, setCurrentDeviceId] = useState<string>("dev-rodrigue-phone");
@@ -88,6 +89,7 @@ export default function App() {
         setShowSandboxControls(false);
       }
     }
+    setIsLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -121,32 +123,46 @@ export default function App() {
 
   // Save changes to localStorage on any state change
   useEffect(() => {
-    if (classes.length > 0) localStorage.setItem("halro_classes", JSON.stringify(classes));
-  }, [classes]);
+    if (isLoaded) {
+      localStorage.setItem("halro_classes", JSON.stringify(classes));
+    }
+  }, [classes, isLoaded]);
 
   useEffect(() => {
-    if (courses.length > 0) localStorage.setItem("halro_courses", JSON.stringify(courses));
-  }, [courses]);
+    if (isLoaded) {
+      localStorage.setItem("halro_courses", JSON.stringify(courses));
+    }
+  }, [courses, isLoaded]);
 
   useEffect(() => {
-    if (teachers.length > 0) localStorage.setItem("halro_teachers", JSON.stringify(teachers));
-  }, [teachers]);
+    if (isLoaded) {
+      localStorage.setItem("halro_teachers", JSON.stringify(teachers));
+    }
+  }, [teachers, isLoaded]);
 
   useEffect(() => {
-    if (studentCodes.length > 0) localStorage.setItem("halro_student_codes", JSON.stringify(studentCodes));
-  }, [studentCodes]);
+    if (isLoaded) {
+      localStorage.setItem("halro_student_codes", JSON.stringify(studentCodes));
+    }
+  }, [studentCodes, isLoaded]);
 
   useEffect(() => {
-    localStorage.setItem("halro_payout_requests", JSON.stringify(payoutRequests));
-  }, [payoutRequests]);
+    if (isLoaded) {
+      localStorage.setItem("halro_payout_requests", JSON.stringify(payoutRequests));
+    }
+  }, [payoutRequests, isLoaded]);
 
   useEffect(() => {
-    localStorage.setItem("halro_invoices", JSON.stringify(invoices));
-  }, [invoices]);
+    if (isLoaded) {
+      localStorage.setItem("halro_invoices", JSON.stringify(invoices));
+    }
+  }, [invoices, isLoaded]);
 
   useEffect(() => {
-    localStorage.setItem("halro_admin_code", superAdminCode);
-  }, [superAdminCode]);
+    if (isLoaded) {
+      localStorage.setItem("halro_admin_code", superAdminCode);
+    }
+  }, [superAdminCode, isLoaded]);
 
   // Handle Online/Offline Status
   useEffect(() => {
@@ -170,6 +186,10 @@ export default function App() {
   // Super Admin / Teacher action: Add Course
   const handleAddCourse = (newCourse: Course) => {
     setCourses(prev => [...prev, newCourse]);
+  };
+
+  const handleUpdateCourses = (updated: Course[]) => {
+    setCourses(updated);
   };
 
   // Super Admin action: Enroll Teacher
@@ -648,6 +668,8 @@ export default function App() {
                 onResolvePayout={handleResolvePayout}
                 onUpdateSuperAdminCode={handleUpdateSuperAdminCode}
                 onUpdateProductionLock={setProductionLock}
+                onAddCourse={handleAddCourse}
+                onUpdateCourses={handleUpdateCourses}
               />
             </div>
           )}
