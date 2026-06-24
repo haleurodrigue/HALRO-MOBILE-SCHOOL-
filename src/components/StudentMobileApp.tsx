@@ -18,6 +18,7 @@ interface StudentMobileAppProps {
   currentDeviceId: string;
   isOnline: boolean;
   onUpdateCodes: (updatedCodes: StudentCode[]) => void;
+  onBackToPortal?: () => void;
 }
 
 export default function StudentMobileApp({
@@ -26,7 +27,8 @@ export default function StudentMobileApp({
   studentCodes,
   currentDeviceId,
   isOnline,
-  onUpdateCodes
+  onUpdateCodes,
+  onBackToPortal
 }: StudentMobileAppProps) {
   const [inputCode, setInputCode] = useState("");
   const [activeCode, setActiveCode] = useState<StudentCode | null>(null);
@@ -228,14 +230,27 @@ export default function StudentMobileApp({
                 </div>
               )}
 
-              <button
-                id="student-login-submit"
-                type="submit"
-                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-semibold transition shadow-lg shadow-emerald-950/40 flex items-center justify-center space-x-2"
-              >
-                <span>Accéder à l'école</span>
-                <ChevronRight size={16} />
-              </button>
+              <div className="space-y-2">
+                <button
+                  id="student-login-submit"
+                  type="submit"
+                  className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-semibold transition shadow-lg shadow-emerald-950/40 flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <span>Accéder à l'école</span>
+                  <ChevronRight size={16} />
+                </button>
+
+                {onBackToPortal && (
+                  <button
+                    id="student-back-portal-btn"
+                    type="button"
+                    onClick={onBackToPortal}
+                    className="w-full py-2.5 px-4 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl text-xs font-semibold transition flex items-center justify-center space-x-1 cursor-pointer"
+                  >
+                    <span>← Retour au Portail Principal</span>
+                  </button>
+                )}
+              </div>
             </form>
 
             <div className="mt-8 p-3.5 bg-slate-900/60 border border-slate-800/60 rounded-2xl text-[11px] text-slate-400 space-y-2">
