@@ -51,6 +51,27 @@ export default function App() {
 
   // Initialize from LocalStorage or seed data
   useEffect(() => {
+    // One-time automatic clean-up of old simulated demo data to make it a fully pristine, ready production version
+    const appVersion = localStorage.getItem("halro_app_version");
+    if (appVersion !== "v2") {
+      localStorage.removeItem("halro_classes");
+      localStorage.removeItem("halro_courses");
+      localStorage.removeItem("halro_teachers");
+      localStorage.removeItem("halro_student_codes");
+      localStorage.removeItem("halro_payout_requests");
+      localStorage.removeItem("halro_invoices");
+      localStorage.setItem("halro_app_version", "v2");
+      
+      setClasses(initialClasses);
+      setCourses(initialCourses);
+      setTeachers(initialTeachers);
+      setStudentCodes(initialStudentCodes);
+      setPayoutRequests([]);
+      setInvoices([]);
+      setIsLoaded(true);
+      return;
+    }
+
     const storedClasses = localStorage.getItem("halro_classes");
     const storedCourses = localStorage.getItem("halro_courses");
     const storedTeachers = localStorage.getItem("halro_teachers");
@@ -248,6 +269,7 @@ export default function App() {
     localStorage.removeItem("halro_payout_requests");
     localStorage.removeItem("halro_invoices");
     localStorage.removeItem("halro_admin_code");
+    localStorage.setItem("halro_app_version", "v2");
 
     setClasses(initialClasses);
     setCourses(initialCourses);
