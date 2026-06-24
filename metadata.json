@@ -1,0 +1,8 @@
+{
+  "name": "HALRO MOBILE SCHOOL",
+  "description": "Application éducative mobile avec accès sécurisé aux supports de cours PDF, gestion des codes d'accès, des abonnements et des commissions enseignants.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
