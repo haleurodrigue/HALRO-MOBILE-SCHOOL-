@@ -81,23 +81,53 @@ export default function App() {
     const storedAdminCode = localStorage.getItem("halro_admin_code");
     const storedLock = localStorage.getItem("halro_production_lock");
 
-    if (storedClasses) setClasses(JSON.parse(storedClasses));
-    else setClasses(initialClasses);
+    try {
+      if (storedClasses) setClasses(JSON.parse(storedClasses));
+      else setClasses(initialClasses);
+    } catch (e) {
+      console.error("Failed to parse classes", e);
+      setClasses(initialClasses);
+    }
 
-    if (storedCourses) setCourses(JSON.parse(storedCourses));
-    else setCourses(initialCourses);
+    try {
+      if (storedCourses) setCourses(JSON.parse(storedCourses));
+      else setCourses(initialCourses);
+    } catch (e) {
+      console.error("Failed to parse courses", e);
+      setCourses(initialCourses);
+    }
 
-    if (storedTeachers) setTeachers(JSON.parse(storedTeachers));
-    else setTeachers(initialTeachers);
+    try {
+      if (storedTeachers) setTeachers(JSON.parse(storedTeachers));
+      else setTeachers(initialTeachers);
+    } catch (e) {
+      console.error("Failed to parse teachers", e);
+      setTeachers(initialTeachers);
+    }
 
-    if (storedCodes) setStudentCodes(JSON.parse(storedCodes));
-    else setStudentCodes(initialStudentCodes);
+    try {
+      if (storedCodes) setStudentCodes(JSON.parse(storedCodes));
+      else setStudentCodes(initialStudentCodes);
+    } catch (e) {
+      console.error("Failed to parse student codes", e);
+      setStudentCodes(initialStudentCodes);
+    }
 
-    if (storedPayouts) setPayoutRequests(JSON.parse(storedPayouts));
-    else setPayoutRequests([]);
+    try {
+      if (storedPayouts) setPayoutRequests(JSON.parse(storedPayouts));
+      else setPayoutRequests([]);
+    } catch (e) {
+      console.error("Failed to parse payout requests", e);
+      setPayoutRequests([]);
+    }
 
-    if (storedInvoices) setInvoices(JSON.parse(storedInvoices));
-    else setInvoices([]);
+    try {
+      if (storedInvoices) setInvoices(JSON.parse(storedInvoices));
+      else setInvoices([]);
+    } catch (e) {
+      console.error("Failed to parse invoices", e);
+      setInvoices([]);
+    }
 
     if (storedAdminCode) setSuperAdminCode(storedAdminCode);
     else setSuperAdminCode("admin1234");
