@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   PlusCircle, Users, BookOpen, Key, DollarSign, Settings, Bell, CheckCircle, 
   Trash2, ShieldCheck, FileText, Download, ShieldAlert, Lock, ToggleLeft, ToggleRight, ArrowRight, Clipboard
@@ -93,6 +93,14 @@ export default function AdminPortal({
   const [adminCodeSuccess, setAdminCodeSuccess] = useState("");
 
   const [viewedCourse, setViewedCourse] = useState<Course | null>(null);
+
+  // Auto-generate teacher matricule when empty
+  useEffect(() => {
+    if (!tMatricule) {
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      setTMatricule(`ENS-${rand}`);
+    }
+  }, [tMatricule]);
 
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -795,16 +803,29 @@ export default function AdminPortal({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Matricule Unique (Ex: ENS-1234)</label>
-                  <input
-                    id="admin-teach-matricule"
-                    type="text"
-                    value={tMatricule}
-                    onChange={(e) => setTMatricule(e.target.value)}
-                    placeholder="Ex: ENS-1024"
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-lg text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500 uppercase"
-                    required
-                  />
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Matricule & Code d'Accès (Généré Automatiquement)</label>
+                  <div className="flex space-x-2">
+                    <input
+                      id="admin-teach-matricule"
+                      type="text"
+                      value={tMatricule}
+                      onChange={(e) => setTMatricule(e.target.value.toUpperCase())}
+                      placeholder="Génération en cours..."
+                      className="flex-1 px-3 py-2 bg-slate-950 border border-slate-850 rounded-lg text-xs text-indigo-400 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-red-500 uppercase"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const rand = Math.floor(1000 + Math.random() * 9000);
+                        setTMatricule(`ENS-${rand}`);
+                      }}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition"
+                      title="Générer un autre code"
+                    >
+                      Générer
+                    </button>
+                  </div>
                 </div>
 
                 <div>
