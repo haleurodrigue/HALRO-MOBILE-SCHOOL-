@@ -36,7 +36,13 @@ export default function App() {
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Simulated Device State
-  const [currentDeviceId, setCurrentDeviceId] = useState<string>("dev-rodrigue-phone");
+  const [currentDeviceId] = useState<string>(() => {
+    const stored = localStorage.getItem("halro_device_id");
+    if (stored) return stored;
+    const newId = "dev-" + Math.floor(100000 + Math.random() * 900000);
+    localStorage.setItem("halro_device_id", newId);
+    return newId;
+  });
 
   // Network Offline States
   const [isOnline, setIsOnline] = useState(navigator.onLine);

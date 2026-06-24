@@ -45,6 +45,8 @@ export interface StudentCode {
   id: string;
   code: string; // APP-xxxx or custom format
   matricule: string; // Student matricule e.g. MAT-xxxx
+  studentName?: string; // Nom de l'élève
+  studentPhone?: string; // Téléphone de l'élève
   type: AccessCodeType;
   classId?: string; // Only for definitive
   status: AccessCodeStatus;

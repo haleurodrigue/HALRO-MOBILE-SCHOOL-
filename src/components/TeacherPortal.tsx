@@ -10,6 +10,130 @@ import {
 } from "lucide-react";
 import { Teacher, Class, Course, StudentCode, PayoutRequest, AccessCodeType } from "../types";
 
+const loadPdfJS = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    if ((window as any).pdfjsLib) {
+      resolve((window as any).pdfjsLib);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js";
+    script.onload = () => {
+      const pdfjsLib = (window as any).pdfjsLib;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+      resolve(pdfjsLib);
+    };
+    script.onerror = () => {
+      reject(new Error("Impossible de charger le moteur de lecture PDF. Veuillez vérifier votre connexion."));
+    };
+    document.body.appendChild(script);
+  });
+};
+
+const extractPdfPagesText = async (file: File): Promise<string[]> => {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdfjsLib = await loadPdfJS();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const totalPages = pdf.numPages;
+  const pagesText: string[] = [];
+  
+  for (let i = 1; i <= totalPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const items = textContent.items as any[];
+    
+    // Reconstruct layout lines
+    const linesMap: { [key: number]: any[] } = {};
+    items.forEach(item => {
+      const y = Math.round(item.transform[5]);
+      const existingY = Object.keys(linesMap).map(Number).find(keyY => Math.abs(keyY - y) < 4);
+      if (existingY !== undefined) {
+        linesMap[existingY].push(item);
+      } else {
+        linesMap[y] = [item];
+      }
+    });
+    
+    const sortedYs = Object.keys(linesMap).map(Number).sort((a, b) => b - a);
+    const pageLines = sortedYs.map(y => {
+      const lineItems = linesMap[y].sort((a, b) => a.transform[4] - b.transform[4]);
+      return lineItems.map(item => item.str).join(" ");
+    });
+    
+    pagesText.push(pageLines.join("\n"));
+  }
+  return pagesText;
+};
+
+const loadMammoth = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    if ((window as any).mammoth) {
+      resolve((window as any).mammoth);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js";
+    script.onload = () => {
+      resolve((window as any).mammoth);
+    };
+    script.onerror = () => {
+      reject(new Error("Impossible de charger le moteur de documents Word."));
+    };
+    document.body.appendChild(script);
+  });
+};
+
+const extractDocxPagesText = async (file: File): Promise<string[]> => {
+  const arrayBuffer = await file.arrayBuffer();
+  const mammoth = await loadMammoth();
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  const rawText = result.value;
+  
+  // Split into chunks/pages of approx 1500 chars (maintaining words)
+  const pages: string[] = [];
+  const words = rawText.split(/\s+/);
+  let currentPageWords: string[] = [];
+  let currentLength = 0;
+  
+  words.forEach((word: string) => {
+    currentPageWords.push(word);
+    currentLength += word.length + 1;
+    if (currentLength >= 1200) {
+      pages.push(currentPageWords.join(" "));
+      currentPageWords = [];
+      currentLength = 0;
+    }
+  });
+  
+  if (currentPageWords.length > 0) {
+    pages.push(currentPageWords.join(" "));
+  }
+  
+  return pages.length > 0 ? pages : ["Document Word sans contenu lisible."];
+};
+
+const readTextFile = (file: File): Promise<string[]> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (text.includes("\f")) {
+        resolve(text.split("\f"));
+      } else {
+        const lines = text.split("\n");
+        const pages: string[] = [];
+        const linesPerPage = 30;
+        for (let i = 0; i < lines.length; i += linesPerPage) {
+          pages.push(lines.slice(i, i + linesPerPage).join("\n"));
+        }
+        resolve(pages);
+      }
+    };
+    reader.onerror = () => reject(new Error("Erreur lors de la lecture du fichier texte."));
+    reader.readAsText(file);
+  });
+};
+
 interface TeacherPortalProps {
   teachers: Teacher[];
   classes: Class[];
@@ -42,6 +166,47 @@ export default function TeacherPortal({
   const [courseClassId, setCourseClassId] = useState("");
   const [courseContentPages, setCourseContentPages] = useState<string[]>([""]);
   const [courseSuccess, setCourseSuccess] = useState("");
+  const [teacherCourseFileLoading, setTeacherCourseFileLoading] = useState(false);
+  const [teacherCourseFileError, setTeacherCourseFileError] = useState("");
+  const [teacherIsDragging, setTeacherIsDragging] = useState(false);
+  const teacherFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleTeacherFileChange = async (file: File) => {
+    if (!file) return;
+    setTeacherCourseFileError("");
+    setTeacherCourseFileLoading(true);
+
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      let pages: string[] = [];
+
+      if (extension === "pdf") {
+        pages = await extractPdfPagesText(file);
+      } else if (extension === "docx") {
+        pages = await extractDocxPagesText(file);
+      } else if (extension === "txt") {
+        pages = await readTextFile(file);
+      } else {
+        throw new Error("Format non supporté. Veuillez importer un fichier PDF, Word (.docx) ou Texte (.txt).");
+      }
+
+      setCourseContentPages(pages);
+      
+      // Auto-set course title from file name if empty
+      if (!courseTitle) {
+        const cleanName = file.name
+          .replace(/\.[^/.]+$/, "")
+          .replace(/_/g, " ")
+          .replace(/-/g, " ");
+        setCourseTitle(cleanName);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setTeacherCourseFileError(err.message || "Une erreur est survenue lors de l'importation du fichier.");
+    } finally {
+      setTeacherCourseFileLoading(false);
+    }
+  };
 
   const [studentMatricule, setStudentMatricule] = useState("");
   const [studentCodeType, setStudentCodeType] = useState<AccessCodeType>("definitive");
@@ -398,6 +563,74 @@ export default function TeacherPortal({
                 </div>
 
                 <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                    Importer un fichier réel (PDF, Word ou Texte)
+                  </label>
+                  <input
+                    type="file"
+                    ref={teacherFileInputRef}
+                    className="hidden"
+                    accept=".pdf,.docx,.txt"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleTeacherFileChange(e.target.files[0]);
+                      }
+                    }}
+                  />
+                  <div 
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setTeacherIsDragging(true);
+                    }}
+                    onDragLeave={() => setTeacherIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setTeacherIsDragging(false);
+                      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                        handleTeacherFileChange(e.dataTransfer.files[0]);
+                      }
+                    }}
+                    onClick={() => teacherFileInputRef.current?.click()}
+                    className={`border border-dashed rounded-xl p-4 text-center cursor-pointer transition relative group ${
+                      teacherIsDragging 
+                        ? "border-emerald-500 bg-emerald-500/10" 
+                        : "border-slate-850 hover:border-indigo-500/50 bg-slate-950/40"
+                    }`}
+                  >
+                    {teacherCourseFileLoading ? (
+                      <div className="space-y-1.5 py-1">
+                        <div className="mx-auto w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-[11px] font-semibold text-slate-300">Extraction et sécurisation...</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="mx-auto w-8 h-8 bg-indigo-500/10 text-indigo-400 rounded-lg flex items-center justify-center group-hover:scale-105 transition">
+                          <FilePlus size={16} />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-semibold text-slate-300">
+                            {courseContentPages[0] && courseContentPages[0] !== "" && courseContentPages[0] !== "Support de cours - PDF sécurisé."
+                              ? "✓ Support importé avec succès !" 
+                              : "Glisser-déposer ou cliquer pour importer un PDF, Word ou Texte"}
+                          </p>
+                          <p className="text-[9px] text-slate-500">
+                            Les pages seront extraites et sécurisées automatiquement.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {teacherCourseFileError && (
+                    <p className="text-red-400 text-[10px] mt-1 font-semibold">{teacherCourseFileError}</p>
+                  )}
+                  {courseContentPages[0] && courseContentPages[0] !== "" && courseContentPages[0] !== "Support de cours - PDF sécurisé." && (
+                    <p className="text-emerald-400 text-[10px] mt-1 font-medium">
+                      ✓ {courseContentPages.length} page(s) prête(s).
+                    </p>
+                  )}
+                </div>
+
+                <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-semibold text-slate-400">Contenu sécurisé par pages</label>
                     <button
@@ -574,7 +807,7 @@ export default function TeacherPortal({
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-slate-800 text-slate-400">
-                    <th className="py-2">Élève (Matricule)</th>
+                    <th className="py-2">Élève & Coordonnées</th>
                     <th className="py-2">Code</th>
                     <th className="py-2">Type</th>
                     <th className="py-2">Classe</th>
@@ -589,7 +822,15 @@ export default function TeacherPortal({
                       const assocClass = classes.find(cl => cl.id === student.classId);
                       return (
                         <tr key={student.id} id={`student-row-${student.id}`} className="hover:bg-slate-850/40">
-                          <td className="py-3 font-mono font-semibold text-slate-300">{student.matricule}</td>
+                          <td className="py-3">
+                            <div className="space-y-0.5">
+                              <div className="font-bold text-slate-200">{student.studentName || "Inconnu"}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">Matricule: {student.matricule}</div>
+                              {student.studentPhone && (
+                                <div className="text-[10px] text-emerald-400 font-mono">{student.studentPhone}</div>
+                              )}
+                            </div>
+                          </td>
                           <td className="py-3 font-mono text-indigo-400">{student.code}</td>
                           <td className="py-3 capitalize">{student.type === "temporary" ? "Temporaire" : "Définitif (1 an)"}</td>
                           <td className="py-3">{assocClass ? assocClass.name : "Toutes"}</td>

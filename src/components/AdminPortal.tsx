@@ -12,6 +12,130 @@ import { Class, Course, Teacher, StudentCode, PayoutRequest, Invoice, AccessCode
 import { jsPDF } from "jspdf";
 import CourseViewer from "./CourseViewer";
 
+const loadPdfJS = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    if ((window as any).pdfjsLib) {
+      resolve((window as any).pdfjsLib);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js";
+    script.onload = () => {
+      const pdfjsLib = (window as any).pdfjsLib;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+      resolve(pdfjsLib);
+    };
+    script.onerror = () => {
+      reject(new Error("Impossible de charger le moteur de lecture PDF. Veuillez vérifier votre connexion."));
+    };
+    document.body.appendChild(script);
+  });
+};
+
+const extractPdfPagesText = async (file: File): Promise<string[]> => {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdfjsLib = await loadPdfJS();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const totalPages = pdf.numPages;
+  const pagesText: string[] = [];
+  
+  for (let i = 1; i <= totalPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const items = textContent.items as any[];
+    
+    // Reconstruct layout lines
+    const linesMap: { [key: number]: any[] } = {};
+    items.forEach(item => {
+      const y = Math.round(item.transform[5]);
+      const existingY = Object.keys(linesMap).map(Number).find(keyY => Math.abs(keyY - y) < 4);
+      if (existingY !== undefined) {
+        linesMap[existingY].push(item);
+      } else {
+        linesMap[y] = [item];
+      }
+    });
+    
+    const sortedYs = Object.keys(linesMap).map(Number).sort((a, b) => b - a);
+    const pageLines = sortedYs.map(y => {
+      const lineItems = linesMap[y].sort((a, b) => a.transform[4] - b.transform[4]);
+      return lineItems.map(item => item.str).join(" ");
+    });
+    
+    pagesText.push(pageLines.join("\n"));
+  }
+  return pagesText;
+};
+
+const loadMammoth = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    if ((window as any).mammoth) {
+      resolve((window as any).mammoth);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js";
+    script.onload = () => {
+      resolve((window as any).mammoth);
+    };
+    script.onerror = () => {
+      reject(new Error("Impossible de charger le moteur de documents Word."));
+    };
+    document.body.appendChild(script);
+  });
+};
+
+const extractDocxPagesText = async (file: File): Promise<string[]> => {
+  const arrayBuffer = await file.arrayBuffer();
+  const mammoth = await loadMammoth();
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  const rawText = result.value;
+  
+  // Split into chunks/pages of approx 1500 chars (maintaining words)
+  const pages: string[] = [];
+  const words = rawText.split(/\s+/);
+  let currentPageWords: string[] = [];
+  let currentLength = 0;
+  
+  words.forEach((word: string) => {
+    currentPageWords.push(word);
+    currentLength += word.length + 1;
+    if (currentLength >= 1200) {
+      pages.push(currentPageWords.join(" "));
+      currentPageWords = [];
+      currentLength = 0;
+    }
+  });
+  
+  if (currentPageWords.length > 0) {
+    pages.push(currentPageWords.join(" "));
+  }
+  
+  return pages.length > 0 ? pages : ["Document Word sans contenu lisible."];
+};
+
+const readTextFile = (file: File): Promise<string[]> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (text.includes("\f")) {
+        resolve(text.split("\f"));
+      } else {
+        const lines = text.split("\n");
+        const pages: string[] = [];
+        const linesPerPage = 30;
+        for (let i = 0; i < lines.length; i += linesPerPage) {
+          pages.push(lines.slice(i, i + linesPerPage).join("\n"));
+        }
+        resolve(pages);
+      }
+    };
+    reader.onerror = () => reject(new Error("Erreur lors de la lecture du fichier texte."));
+    reader.readAsText(file);
+  });
+};
+
 interface AdminPortalProps {
   classes: Class[];
   courses: Course[];
@@ -82,8 +206,51 @@ export default function AdminPortal({
   const [adminCourseAuthorMatricule, setAdminCourseAuthorMatricule] = useState(""); // empty means Administration
   const [adminCourseContentPages, setAdminCourseContentPages] = useState<string[]>([""]);
   const [adminCourseSuccess, setAdminCourseSuccess] = useState("");
+  const [adminCourseFileLoading, setAdminCourseFileLoading] = useState(false);
+  const [adminCourseFileError, setAdminCourseFileError] = useState("");
+  const [adminIsDragging, setAdminIsDragging] = useState(false);
+  const adminFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleAdminFileChange = async (file: File) => {
+    if (!file) return;
+    setAdminCourseFileError("");
+    setAdminCourseFileLoading(true);
+
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      let pages: string[] = [];
+
+      if (extension === "pdf") {
+        pages = await extractPdfPagesText(file);
+      } else if (extension === "docx") {
+        pages = await extractDocxPagesText(file);
+      } else if (extension === "txt") {
+        pages = await readTextFile(file);
+      } else {
+        throw new Error("Format non supporté. Veuillez importer un fichier PDF, Word (.docx) ou Texte (.txt).");
+      }
+
+      setAdminCourseContentPages(pages);
+      
+      // Auto-set course title from file name if empty
+      if (!adminCourseTitle) {
+        const cleanName = file.name
+          .replace(/\.[^/.]+$/, "")
+          .replace(/_/g, " ")
+          .replace(/-/g, " ");
+        setAdminCourseTitle(cleanName);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setAdminCourseFileError(err.message || "Une erreur est survenue lors de l'importation.");
+    } finally {
+      setAdminCourseFileLoading(false);
+    }
+  };
 
   const [studMatricule, setStudMatricule] = useState("");
+  const [studName, setStudName] = useState("");
+  const [studPhone, setStudPhone] = useState("");
   const [codeType, setCodeType] = useState<AccessCodeType>("definitive");
   const [studClassId, setStudClassId] = useState("");
   const [codeSuccess, setCodeSuccess] = useState("");
@@ -101,6 +268,14 @@ export default function AdminPortal({
       setTMatricule(`ENS-${rand}`);
     }
   }, [tMatricule]);
+
+  // Auto-generate student matricule when empty
+  useEffect(() => {
+    if (!studMatricule) {
+      const rand = Math.floor(10000 + Math.random() * 90000);
+      setStudMatricule(`MAT-${rand}`);
+    }
+  }, [studMatricule]);
 
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -317,6 +492,8 @@ export default function AdminPortal({
       id: "sc-" + randNum,
       code: codeStr,
       matricule: studMatricule.trim().toUpperCase(),
+      studentName: studName.trim() || undefined,
+      studentPhone: studPhone.trim() || undefined,
       type: codeType,
       classId: codeType === "definitive" ? studClassId : undefined,
       status: "active",
@@ -358,6 +535,8 @@ export default function AdminPortal({
     setCodeSuccess(`Nouveau code généré : ${codeStr}`);
     setCodeLog(commLog);
     setStudMatricule("");
+    setStudName("");
+    setStudPhone("");
     setTimeout(() => {
       setCodeSuccess("");
       setCodeLog("");
@@ -1055,43 +1234,74 @@ export default function AdminPortal({
                   </p>
                 </div>
 
-                {/* Drag-and-drop / File Upload Mock Zone */}
+                {/* Real File Upload Zone */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">
-                    Fichier de support de cours (Simulation Drag & Drop ou Importation PDF)
+                    Fichier de support de cours (Importer un PDF, Word ou Fichier Texte Réel)
                   </label>
-                  <div 
-                    className="border-2 border-dashed border-slate-800 hover:border-indigo-500/50 rounded-xl p-6 text-center cursor-pointer transition bg-slate-950/40 relative group"
-                    onClick={() => {
-                      // Simulating picking a file
-                      const dummyTitles = [
-                        "Physique_Bac_Correction_Sujet_Série.pdf",
-                        "SVT_Anatomie_et_Nutrition_Terminales.pdf",
-                        "Mathematiques_Derivees_Premieres.pdf",
-                        "Philosophie_Rene_Descartes_Essais.pdf"
-                      ];
-                      const randomTitle = dummyTitles[Math.floor(Math.random() * dummyTitles.length)];
-                      if (!adminCourseTitle) {
-                        setAdminCourseTitle(randomTitle.replace(".pdf", "").replace(/_/g, " "));
+                  <input
+                    type="file"
+                    ref={adminFileInputRef}
+                    className="hidden"
+                    accept=".pdf,.docx,.txt"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleAdminFileChange(e.target.files[0]);
                       }
-                      const dummyContent = [
-                        `Page 1: Chapitre Spécial • Extrait de document importé du fichier ${randomTitle}\n\nCe support pédagogique est entièrement protégé par filigrane dynamique afin d'empêcher les copies ou reproductions illicites. Le code de l'élève qui étudie ce document y est gravé de manière indélébile.`,
-                        `Page 2: Exercices d'application pratiques du cours.\n\nFaites les exercices de fin de chapitre. Résolution demandée pour la prochaine évaluation.`
-                      ];
-                      setAdminCourseContentPages(dummyContent);
-                      alert(`📄 PDF Simulé avec succès : "${randomTitle}" importé et formaté en pages protégées.`);
                     }}
+                  />
+                  <div 
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setAdminIsDragging(true);
+                    }}
+                    onDragLeave={() => setAdminIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setAdminIsDragging(false);
+                      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                        handleAdminFileChange(e.dataTransfer.files[0]);
+                      }
+                    }}
+                    onClick={() => adminFileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition relative group ${
+                      adminIsDragging 
+                        ? "border-emerald-500 bg-emerald-500/10" 
+                        : "border-slate-800 hover:border-red-500/50 bg-slate-950/40"
+                    }`}
                   >
-                    <div className="space-y-2">
-                      <div className="mx-auto w-10 h-10 bg-indigo-500/10 text-indigo-400 rounded-lg flex items-center justify-center group-hover:scale-105 transition">
-                        <FileText size={20} />
+                    {adminCourseFileLoading ? (
+                      <div className="space-y-2 py-2">
+                        <div className="mx-auto w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-xs font-semibold text-slate-300">Extraction et sécurisation du contenu en cours...</p>
+                        <p className="text-[10px] text-slate-500">Moteur sécurisé HALRO Mobile School actif</p>
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-300">Glisser-déposer votre fichier PDF ici, ou cliquer pour parcourir</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Le fichier sera converti et crypté automatiquement (Max 25 Mo)</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="mx-auto w-10 h-10 bg-red-500/10 text-red-400 rounded-lg flex items-center justify-center group-hover:scale-105 transition">
+                          <FileText size={20} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-slate-300">
+                            {adminCourseContentPages[0] && adminCourseContentPages[0] !== "" && adminCourseContentPages[0] !== "Support de cours - PDF sécurisé."
+                              ? "✓ Document importé avec succès !" 
+                              : "Glisser-déposer votre fichier PDF, Word (.docx) ou Texte (.txt) ici"}
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Ou cliquez pour parcourir les fichiers de votre appareil (téléphone ou ordinateur)
+                          </p>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
+                  {adminCourseFileError && (
+                    <p className="text-red-400 text-[10px] mt-1 font-semibold">{adminCourseFileError}</p>
+                  )}
+                  {adminCourseContentPages[0] && adminCourseContentPages[0] !== "" && adminCourseContentPages[0] !== "Support de cours - PDF sécurisé." && (
+                    <p className="text-emerald-400 text-[10px] mt-1 font-medium">
+                      ✓ {adminCourseContentPages.length} page(s) de contenu prête(s) pour diffusion protégée.
+                    </p>
+                  )}
                 </div>
 
                 {/* Multi-page editor (just like teachers) */}
@@ -1236,16 +1446,55 @@ export default function AdminPortal({
 
               <form onSubmit={handleGenerateStudentCode} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1 font-sans">Numéro de Matricule Élève</label>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1 font-sans">Nom complet de l'élève</label>
                   <input
-                    id="admin-student-matricule"
+                    id="admin-student-name"
                     type="text"
-                    value={studMatricule}
-                    onChange={(e) => setStudMatricule(e.target.value)}
-                    placeholder="Ex: MAT-2026-003"
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-lg text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500 uppercase"
+                    value={studName}
+                    onChange={(e) => setStudName(e.target.value)}
+                    placeholder="Ex: Jean Dupont"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-lg text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500"
                     required
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1 font-sans">Téléphone / WhatsApp</label>
+                  <input
+                    id="admin-student-phone"
+                    type="text"
+                    value={studPhone}
+                    onChange={(e) => setStudPhone(e.target.value)}
+                    placeholder="Ex: +237 6xx xx xx xx"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-lg text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1 font-sans">Matricule de l'Élève (Généré Automatiquement)</label>
+                  <div className="flex space-x-2">
+                    <input
+                      id="admin-student-matricule"
+                      type="text"
+                      value={studMatricule}
+                      onChange={(e) => setStudMatricule(e.target.value.toUpperCase())}
+                      placeholder="Génération en cours..."
+                      className="flex-1 px-3 py-2 bg-slate-950 border border-slate-850 rounded-lg text-xs text-red-400 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-red-500 uppercase"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const rand = Math.floor(10000 + Math.random() * 90000);
+                        setStudMatricule(`MAT-${rand}`);
+                      }}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition"
+                      title="Générer un autre matricule"
+                    >
+                      Générer
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -1342,7 +1591,7 @@ export default function AdminPortal({
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400">
-                      <th className="py-2">Élève (Matricule)</th>
+                      <th className="py-2">Élève & Coordonnées</th>
                       <th className="py-2">Code d'accès</th>
                       <th className="py-2">Type</th>
                       <th className="py-2">Classe Accès</th>
@@ -1360,7 +1609,15 @@ export default function AdminPortal({
                       
                       return (
                         <tr key={student.id} id={`admin-student-row-${student.id}`} className="hover:bg-slate-850/30">
-                          <td className="py-3 font-mono font-bold text-slate-300">{student.matricule}</td>
+                          <td className="py-3">
+                            <div className="space-y-0.5">
+                              <div className="font-bold text-slate-200">{student.studentName || "Inconnu"}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">Matricule: {student.matricule}</div>
+                              {student.studentPhone && (
+                                <div className="text-[10px] text-emerald-400 font-mono">{student.studentPhone}</div>
+                              )}
+                            </div>
+                          </td>
                           <td className="py-3 font-mono font-extrabold text-red-400 select-all">{student.code}</td>
                           <td className="py-3 capitalize text-slate-300">{student.type === "temporary" ? "Temporaire" : "Définitif (1 an)"}</td>
                           <td className="py-3 font-semibold text-slate-200">{assocClass ? assocClass.name : "Toutes les Classes"}</td>

@@ -107,22 +107,14 @@ export default function StudentMobileApp({
     }
 
     // Check device limiting rules:
-    // If this device is not in devicesUsed list, we must add it.
+    // If this device is not in devicesUsed list, we must check if we've already reached the limit.
     let updatedDevices = [...codeObj.devicesUsed];
     if (!updatedDevices.includes(currentDeviceId)) {
+      if (updatedDevices.length >= 2) {
+        setErrorMsg("Connexion impossible : Ce code est déjà utilisé sur 2 autres appareils (maximum de 2 appareils autorisé).");
+        return;
+      }
       updatedDevices.push(currentDeviceId);
-    }
-
-    // If total devices exceeds 2, automatically deactivate the code!
-    if (updatedDevices.length > 2) {
-      const updated = studentCodes.map(c => 
-        c.code === trimmed 
-          ? { ...c, devicesUsed: updatedDevices, status: "deactivated" as const } 
-          : c
-      );
-      onUpdateCodes(updated);
-      setErrorMsg("CODE DÉSACTIVÉ : Ce code a été utilisé sur plus de 2 appareils simultanément.");
-      return;
     }
 
     // Otherwise, we log them in and update devices list
