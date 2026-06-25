@@ -44,8 +44,16 @@ export async function savePayoutRequestToFirestore(payout: PayoutRequest): Promi
   await setDoc(doc(db, "payoutRequests", payout.id), payout);
 }
 
+export async function deletePayoutRequestFromFirestore(payoutId: string): Promise<void> {
+  await deleteDoc(doc(db, "payoutRequests", payoutId));
+}
+
 export async function saveInvoiceToFirestore(invoice: Invoice): Promise<void> {
   await setDoc(doc(db, "invoices", invoice.id), invoice);
+}
+
+export async function deleteInvoiceFromFirestore(invoiceId: string): Promise<void> {
+  await deleteDoc(doc(db, "invoices", invoiceId));
 }
 
 // Bulk fetch function

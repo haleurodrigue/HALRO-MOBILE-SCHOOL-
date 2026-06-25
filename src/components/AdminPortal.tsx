@@ -559,7 +559,7 @@ export default function AdminPortal({
     
     doc.setFontSize(10);
     doc.text("Établissement d'Enseignement à Distance de Référence", 20, 32);
-    doc.text("Contact Direction : Whatsapp admin1234", 20, 37);
+    doc.text("Contact Direction : haleurodrigue@gmail.com", 20, 37);
 
     // Invoice Meta
     doc.setTextColor(30, 41, 59);
@@ -571,7 +571,7 @@ export default function AdminPortal({
     const invoiceId = `FACT-${Math.floor(100000 + Math.random() * 900000)}`;
     doc.text(`N° Facture : ${invoiceId}`, 20, 72);
     doc.text(`Date de paiement : ${new Date().toLocaleDateString()}`, 20, 77);
-    doc.text(`Généré par l'Administrateur : ${password}`, 20, 82);
+    doc.text("Généré par l'Administrateur : HALEU NGUEULEU RODRIGUE", 20, 82);
 
     doc.line(20, 87, 190, 87);
 

@@ -29,7 +29,9 @@ import {
   saveStudentCodeToFirestore, 
   deleteStudentCodeFromFirestore,
   savePayoutRequestToFirestore, 
+  deletePayoutRequestFromFirestore,
   saveInvoiceToFirestore,
+  deleteInvoiceFromFirestore,
   resetFirestore
 } from "./lib/firebaseSync";
 
@@ -74,6 +76,8 @@ export default function App() {
   useEffect(() => {
     const loadDataWithFallback = async () => {
       let firebaseLoaded = false;
+      let loadedPayoutRequests: PayoutRequest[] = [];
+      let loadedInvoices: Invoice[] = [];
       
       const isConnected = await testFirestoreConnection();
       if (isConnected) {
@@ -85,16 +89,15 @@ export default function App() {
           setCourses(dbData.courses);
           setTeachers(dbData.teachers);
           setStudentCodes(dbData.studentCodes);
-          setPayoutRequests(dbData.payoutRequests);
-          setInvoices(dbData.invoices);
+          
+          loadedPayoutRequests = dbData.payoutRequests;
+          loadedInvoices = dbData.invoices;
           
           // Back-save to localStorage/IndexedDB for next offline boot
           localStorage.setItem("halro_classes", JSON.stringify(dbData.classes));
           saveCoursesToIndexedDB(dbData.courses);
           localStorage.setItem("halro_teachers", JSON.stringify(dbData.teachers));
           localStorage.setItem("halro_student_codes", JSON.stringify(dbData.studentCodes));
-          localStorage.setItem("halro_payout_requests", JSON.stringify(dbData.payoutRequests));
-          localStorage.setItem("halro_invoices", JSON.stringify(dbData.invoices));
           
           firebaseLoaded = true;
           console.log("✓ All data loaded successfully from cloud Firestore.");
@@ -120,6 +123,9 @@ export default function App() {
           setCourses(initialCourses);
           setTeachers(initialTeachers);
           setStudentCodes(initialStudentCodes);
+          loadedPayoutRequests = [];
+          loadedInvoices = [];
+          
           setPayoutRequests([]);
           setInvoices([]);
           setIsLoaded(true);
@@ -154,18 +160,12 @@ export default function App() {
         }
 
         try {
-          if (storedPayouts) setPayoutRequests(JSON.parse(storedPayouts));
-          else setPayoutRequests([]);
-        } catch (e) {
-          setPayoutRequests([]);
-        }
+          if (storedPayouts) loadedPayoutRequests = JSON.parse(storedPayouts);
+        } catch (e) {}
 
         try {
-          if (storedInvoices) setInvoices(JSON.parse(storedInvoices));
-          else setInvoices([]);
-        } catch (e) {
-          setInvoices([]);
-        }
+          if (storedInvoices) loadedInvoices = JSON.parse(storedInvoices);
+        } catch (e) {}
 
         // Load courses asynchronously from IndexedDB
         try {
@@ -180,6 +180,40 @@ export default function App() {
           setCourses(initialCourses);
         }
       }
+
+      // 1-Year Automatic Cleanup for Teacher Payment History (PayoutRequests & Invoices)
+      try {
+        const oneYearAgoMs = Date.now() - 365 * 24 * 60 * 60 * 1000;
+
+        const expiredPayouts = loadedPayoutRequests.filter(p => new Date(p.createdAt).getTime() < oneYearAgoMs);
+        const validPayouts = loadedPayoutRequests.filter(p => new Date(p.createdAt).getTime() >= oneYearAgoMs);
+
+        const expiredInvoices = loadedInvoices.filter(i => new Date(i.paidAt).getTime() < oneYearAgoMs);
+        const validInvoices = loadedInvoices.filter(i => new Date(i.paidAt).getTime() >= oneYearAgoMs);
+
+        if (expiredPayouts.length > 0 || expiredInvoices.length > 0) {
+          console.log(`[Auto-Cleanup] Deleting ${expiredPayouts.length} expired payout requests and ${expiredInvoices.length} expired invoices (older than 1 year).`);
+          
+          loadedPayoutRequests = validPayouts;
+          loadedInvoices = validInvoices;
+
+          if (firebaseLoaded) {
+            for (const payout of expiredPayouts) {
+              await deletePayoutRequestFromFirestore(payout.id).catch(err => console.error("Firestore sync failed for expired payout:", err));
+            }
+            for (const invoice of expiredInvoices) {
+              await deleteInvoiceFromFirestore(invoice.id).catch(err => console.error("Firestore sync failed for expired invoice:", err));
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error during auto-cleanup of old payment history:", err);
+      }
+
+      setPayoutRequests(loadedPayoutRequests);
+      setInvoices(loadedInvoices);
+      localStorage.setItem("halro_payout_requests", JSON.stringify(loadedPayoutRequests));
+      localStorage.setItem("halro_invoices", JSON.stringify(loadedInvoices));
 
       // Rest of simple settings that don't live in Firestore collections
       const storedAdminCode = localStorage.getItem("halro_admin_code");
@@ -735,6 +769,24 @@ export default function App() {
                   <p className="leading-relaxed">
                     L'attribution d'un code définitif à un élève pour une classe donnée génère immédiatement une commission automatique créditée sur le solde de tous les enseignants auteurs publiés dans cette classe.
                   </p>
+                </div>
+              </div>
+
+              {/* Contacter l'administrateur section */}
+              <div id="contact-admin-section" className="p-5 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="space-y-1 text-center md:text-left">
+                  <h4 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
+                    📞 Contacter l'administrateur
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    Pour toute attribution de code, support technique, demande de partenariat ou question sur la plateforme.
+                  </p>
+                </div>
+                <div className="bg-slate-950/60 px-4 py-2 rounded-xl border border-slate-800/80 text-center md:text-right">
+                  <span className="text-[10px] text-slate-500 font-mono block uppercase tracking-widest font-bold mb-0.5">E-mail de support</span>
+                  <a href="mailto:haleurodrigue@gmail.com" className="text-sm font-bold text-indigo-400 hover:text-indigo-300 font-mono transition">
+                    haleurodrigue@gmail.com
+                  </a>
                 </div>
               </div>
 
