@@ -17,6 +17,7 @@ import {
 import StudentMobileApp from "./components/StudentMobileApp";
 import TeacherPortal from "./components/TeacherPortal";
 import AdminPortal from "./components/AdminPortal";
+import { saveCoursesToIndexedDB, loadCoursesFromIndexedDB } from "./lib/indexedDbHelper";
 
 export default function App() {
   // Application Roles Tabs: 'student' | 'teacher' | 'admin'
@@ -79,7 +80,6 @@ export default function App() {
     }
 
     const storedClasses = localStorage.getItem("halro_classes");
-    const storedCourses = localStorage.getItem("halro_courses");
     const storedTeachers = localStorage.getItem("halro_teachers");
     const storedCodes = localStorage.getItem("halro_student_codes");
     const storedPayouts = localStorage.getItem("halro_payout_requests");
@@ -93,14 +93,6 @@ export default function App() {
     } catch (e) {
       console.error("Failed to parse classes", e);
       setClasses(initialClasses);
-    }
-
-    try {
-      if (storedCourses) setCourses(JSON.parse(storedCourses));
-      else setCourses(initialCourses);
-    } catch (e) {
-      console.error("Failed to parse courses", e);
-      setCourses(initialCourses);
     }
 
     try {
@@ -146,7 +138,21 @@ export default function App() {
         setShowSandboxControls(false);
       }
     }
-    setIsLoaded(true);
+
+    // Load courses asynchronously from IndexedDB to bypass 5MB localStorage limits for heavy books
+    loadCoursesFromIndexedDB().then((dbCourses) => {
+      if (dbCourses && dbCourses.length > 0) {
+        setCourses(dbCourses);
+      } else {
+        setCourses(initialCourses);
+        saveCoursesToIndexedDB(initialCourses);
+      }
+      setIsLoaded(true);
+    }).catch((e) => {
+      console.error("IndexedDB courses load failed", e);
+      setCourses(initialCourses);
+      setIsLoaded(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -187,7 +193,7 @@ export default function App() {
 
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem("halro_courses", JSON.stringify(courses));
+      saveCoursesToIndexedDB(courses);
     }
   }, [courses, isLoaded]);
 

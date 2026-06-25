@@ -30,7 +30,7 @@ const loadPdfJS = (): Promise<any> => {
   });
 };
 
-const extractPdfPagesText = async (file: File): Promise<string[]> => {
+const extractPdfPagesText = async (file: File): Promise<string> => {
   const arrayBuffer = await file.arrayBuffer();
   const pdfjsLib = await loadPdfJS();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -60,9 +60,10 @@ const extractPdfPagesText = async (file: File): Promise<string[]> => {
       return lineItems.map(item => item.str).join(" ");
     });
     
-    pagesText.push(pageLines.join("\n"));
+    // Add subtitle indicating section/page boundaries beautifully in continuous document
+    pagesText.push(`\n# --- PAGE ${i} --- \n\n` + pageLines.join("\n"));
   }
-  return pagesText;
+  return pagesText.join("\n");
 };
 
 const loadMammoth = (): Promise<any> => {
@@ -83,51 +84,18 @@ const loadMammoth = (): Promise<any> => {
   });
 };
 
-const extractDocxPagesText = async (file: File): Promise<string[]> => {
+const extractDocxPagesText = async (file: File): Promise<string> => {
   const arrayBuffer = await file.arrayBuffer();
   const mammoth = await loadMammoth();
   const result = await mammoth.extractRawText({ arrayBuffer });
-  const rawText = result.value;
-  
-  // Split into chunks/pages of approx 1500 chars (maintaining words)
-  const pages: string[] = [];
-  const words = rawText.split(/\s+/);
-  let currentPageWords: string[] = [];
-  let currentLength = 0;
-  
-  words.forEach((word: string) => {
-    currentPageWords.push(word);
-    currentLength += word.length + 1;
-    if (currentLength >= 1200) {
-      pages.push(currentPageWords.join(" "));
-      currentPageWords = [];
-      currentLength = 0;
-    }
-  });
-  
-  if (currentPageWords.length > 0) {
-    pages.push(currentPageWords.join(" "));
-  }
-  
-  return pages.length > 0 ? pages : ["Document Word sans contenu lisible."];
+  return result.value || "Document Word sans contenu lisible.";
 };
 
-const readTextFile = (file: File): Promise<string[]> => {
+const readTextFile = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target?.result as string;
-      if (text.includes("\f")) {
-        resolve(text.split("\f"));
-      } else {
-        const lines = text.split("\n");
-        const pages: string[] = [];
-        const linesPerPage = 30;
-        for (let i = 0; i < lines.length; i += linesPerPage) {
-          pages.push(lines.slice(i, i + linesPerPage).join("\n"));
-        }
-        resolve(pages);
-      }
+      resolve(e.target?.result as string);
     };
     reader.onerror = () => reject(new Error("Erreur lors de la lecture du fichier texte."));
     reader.readAsText(file);
@@ -164,7 +132,7 @@ export default function TeacherPortal({
   // States for Teacher Actions
   const [courseTitle, setCourseTitle] = useState("");
   const [courseClassId, setCourseClassId] = useState("");
-  const [courseContentPages, setCourseContentPages] = useState<string[]>([""]);
+  const [courseContent, setCourseContent] = useState<string>("");
   const [courseSuccess, setCourseSuccess] = useState("");
   const [teacherCourseFileLoading, setTeacherCourseFileLoading] = useState(false);
   const [teacherCourseFileError, setTeacherCourseFileError] = useState("");
@@ -178,7 +146,7 @@ export default function TeacherPortal({
 
     try {
       const extension = file.name.split(".").pop()?.toLowerCase();
-      let pages: string[] = [];
+      let pages = "";
 
       if (extension === "pdf") {
         pages = await extractPdfPagesText(file);
@@ -190,7 +158,7 @@ export default function TeacherPortal({
         throw new Error("Format non supporté. Veuillez importer un fichier PDF, Word (.docx) ou Texte (.txt).");
       }
 
-      setCourseContentPages(pages);
+      setCourseContent(pages);
       
       // Auto-set course title from file name if empty
       if (!courseTitle) {
@@ -343,7 +311,7 @@ export default function TeacherPortal({
     e.preventDefault();
     setCourseSuccess("");
 
-    if (!courseTitle.trim() || !courseClassId || courseContentPages.some(p => !p.trim())) {
+    if (!courseTitle.trim() || !courseClassId || !courseContent.trim()) {
       alert("Veuillez remplir tous les champs du cours.");
       return;
     }
@@ -354,14 +322,14 @@ export default function TeacherPortal({
       title: courseTitle,
       authorId: activeTeacher.matricule,
       authorName: `M. ${activeTeacher.name} ${activeTeacher.surname}`,
-      content: courseContentPages,
+      content: courseContent.trim(),
       createdAt: new Date().toISOString()
     };
 
     onAddCourse(newCourse);
     setCourseSuccess("Le cours a été ajouté avec succès dans la classe sélectionnée !");
     setCourseTitle("");
-    setCourseContentPages([""]);
+    setCourseContent("");
     setTimeout(() => setCourseSuccess(""), 5000);
   };
 
@@ -609,12 +577,12 @@ export default function TeacherPortal({
                         </div>
                         <div>
                           <p className="text-[11px] font-semibold text-slate-300">
-                            {courseContentPages[0] && courseContentPages[0] !== "" && courseContentPages[0] !== "Support de cours - PDF sécurisé."
+                            {courseContent && courseContent !== "" && courseContent !== "Support de cours - PDF sécurisé."
                               ? "✓ Support importé avec succès !" 
                               : "Glisser-déposer ou cliquer pour importer un PDF, Word ou Texte"}
                           </p>
                           <p className="text-[9px] text-slate-500">
-                            Les pages seront extraites et sécurisées automatiquement.
+                            Le contenu intégral de votre document sera extrait et sécurisé automatiquement.
                           </p>
                         </div>
                       </div>
@@ -623,43 +591,33 @@ export default function TeacherPortal({
                   {teacherCourseFileError && (
                     <p className="text-red-400 text-[10px] mt-1 font-semibold">{teacherCourseFileError}</p>
                   )}
-                  {courseContentPages[0] && courseContentPages[0] !== "" && courseContentPages[0] !== "Support de cours - PDF sécurisé." && (
+                  {courseContent && courseContent !== "" && courseContent !== "Support de cours - PDF sécurisé." && (
                     <p className="text-emerald-400 text-[10px] mt-1 font-medium">
-                      ✓ {courseContentPages.length} page(s) prête(s).
+                      ✓ Contenu extrait avec succès ({courseContent.length} caractères, environ {Math.ceil(courseContent.length / 1500)} page(s) standard).
                     </p>
                   )}
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-400">Contenu sécurisé par pages</label>
-                    <button
-                      type="button"
-                      onClick={() => setCourseContentPages([...courseContentPages, ""])}
-                      className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold"
-                    >
-                      + Ajouter une page
-                    </button>
+                    <label className="block text-xs font-semibold text-slate-400">Contenu écrit du Document / Livre (Texte intégral)</label>
+                    <div className="text-[9px] text-slate-500 font-mono">
+                      {courseContent ? courseContent.split(/\s+/).filter(Boolean).length : 0} mots
+                    </div>
                   </div>
                   
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {courseContentPages.map((page, idx) => (
-                      <div key={idx} className="relative">
-                        <span className="absolute left-2.5 top-2 text-[9px] font-mono font-bold text-slate-600 bg-slate-900 px-1 rounded">P. {idx + 1}</span>
-                        <textarea
-                          id={`teacher-course-page-${idx}`}
-                          value={page}
-                          onChange={(e) => {
-                            const updated = [...courseContentPages];
-                            updated[idx] = e.target.value;
-                            setCourseContentPages(updated);
-                          }}
-                          placeholder={`Entrez le texte de la page ${idx + 1} du cours...`}
-                          className="w-full pl-10 pr-3 py-2 bg-slate-950 border border-slate-850 rounded-lg text-xs text-slate-300 placeholder-slate-700 min-h-[60px] focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          required
-                        />
-                      </div>
-                    ))}
+                  <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 space-y-1">
+                    <textarea
+                      id="teacher-course-content-textarea"
+                      value={courseContent}
+                      onChange={(e) => setCourseContent(e.target.value)}
+                      placeholder="Saisissez ou modifiez ici le texte intégral de votre support de cours ou du livre..."
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-850 rounded-lg text-xs text-slate-300 placeholder-slate-700 min-h-[160px] focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans resize-y"
+                      required
+                    />
+                    <div className="text-[8px] text-slate-500 italic">
+                      ✓ Système de stockage volumineux IndexedDB actif (Capacité illimitée pour vos livres)
+                    </div>
                   </div>
                 </div>
 

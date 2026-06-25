@@ -32,7 +32,7 @@ const loadPdfJS = (): Promise<any> => {
   });
 };
 
-const extractPdfPagesText = async (file: File): Promise<string[]> => {
+const extractPdfPagesText = async (file: File): Promise<string> => {
   const arrayBuffer = await file.arrayBuffer();
   const pdfjsLib = await loadPdfJS();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -62,9 +62,10 @@ const extractPdfPagesText = async (file: File): Promise<string[]> => {
       return lineItems.map(item => item.str).join(" ");
     });
     
-    pagesText.push(pageLines.join("\n"));
+    // Add subtitle indicating section/page boundaries beautifully in continuous document
+    pagesText.push(`\n# --- PAGE ${i} --- \n\n` + pageLines.join("\n"));
   }
-  return pagesText;
+  return pagesText.join("\n");
 };
 
 const loadMammoth = (): Promise<any> => {
@@ -85,51 +86,18 @@ const loadMammoth = (): Promise<any> => {
   });
 };
 
-const extractDocxPagesText = async (file: File): Promise<string[]> => {
+const extractDocxPagesText = async (file: File): Promise<string> => {
   const arrayBuffer = await file.arrayBuffer();
   const mammoth = await loadMammoth();
   const result = await mammoth.extractRawText({ arrayBuffer });
-  const rawText = result.value;
-  
-  // Split into chunks/pages of approx 1500 chars (maintaining words)
-  const pages: string[] = [];
-  const words = rawText.split(/\s+/);
-  let currentPageWords: string[] = [];
-  let currentLength = 0;
-  
-  words.forEach((word: string) => {
-    currentPageWords.push(word);
-    currentLength += word.length + 1;
-    if (currentLength >= 1200) {
-      pages.push(currentPageWords.join(" "));
-      currentPageWords = [];
-      currentLength = 0;
-    }
-  });
-  
-  if (currentPageWords.length > 0) {
-    pages.push(currentPageWords.join(" "));
-  }
-  
-  return pages.length > 0 ? pages : ["Document Word sans contenu lisible."];
+  return result.value || "Document Word sans contenu lisible.";
 };
 
-const readTextFile = (file: File): Promise<string[]> => {
+const readTextFile = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target?.result as string;
-      if (text.includes("\f")) {
-        resolve(text.split("\f"));
-      } else {
-        const lines = text.split("\n");
-        const pages: string[] = [];
-        const linesPerPage = 30;
-        for (let i = 0; i < lines.length; i += linesPerPage) {
-          pages.push(lines.slice(i, i + linesPerPage).join("\n"));
-        }
-        resolve(pages);
-      }
+      resolve(e.target?.result as string);
     };
     reader.onerror = () => reject(new Error("Erreur lors de la lecture du fichier texte."));
     reader.readAsText(file);
@@ -204,7 +172,7 @@ export default function AdminPortal({
   const [adminCourseTitle, setAdminCourseTitle] = useState("");
   const [adminCourseClassId, setAdminCourseClassId] = useState("");
   const [adminCourseAuthorMatricule, setAdminCourseAuthorMatricule] = useState(""); // empty means Administration
-  const [adminCourseContentPages, setAdminCourseContentPages] = useState<string[]>([""]);
+  const [adminCourseContent, setAdminCourseContent] = useState<string>("");
   const [adminCourseSuccess, setAdminCourseSuccess] = useState("");
   const [adminCourseFileLoading, setAdminCourseFileLoading] = useState(false);
   const [adminCourseFileError, setAdminCourseFileError] = useState("");
@@ -218,7 +186,7 @@ export default function AdminPortal({
 
     try {
       const extension = file.name.split(".").pop()?.toLowerCase();
-      let pages: string[] = [];
+      let pages = "";
 
       if (extension === "pdf") {
         pages = await extractPdfPagesText(file);
@@ -230,7 +198,7 @@ export default function AdminPortal({
         throw new Error("Format non supporté. Veuillez importer un fichier PDF, Word (.docx) ou Texte (.txt).");
       }
 
-      setAdminCourseContentPages(pages);
+      setAdminCourseContent(pages);
       
       // Auto-set course title from file name if empty
       if (!adminCourseTitle) {
@@ -437,9 +405,7 @@ export default function AdminPortal({
       }
     }
 
-    // Clean up empty content pages, and make sure we have at least one page
-    const filteredPages = adminCourseContentPages.map(p => p.trim()).filter(p => p.length > 0);
-    const pagesToSave = filteredPages.length > 0 ? filteredPages : ["Support de cours - PDF sécurisé."];
+    const contentToSave = adminCourseContent.trim() || "Support de cours - PDF sécurisé.";
 
     const newCourse: Course = {
       id: "course-" + Math.floor(1000 + Math.random() * 9000),
@@ -447,7 +413,7 @@ export default function AdminPortal({
       title: adminCourseTitle.trim(),
       authorId,
       authorName,
-      content: pagesToSave,
+      content: contentToSave,
       createdAt: new Date().toISOString()
     };
 
@@ -456,7 +422,7 @@ export default function AdminPortal({
     setAdminCourseTitle("");
     setAdminCourseClassId("");
     setAdminCourseAuthorMatricule("");
-    setAdminCourseContentPages([""]);
+    setAdminCourseContent("");
     setTimeout(() => setAdminCourseSuccess(""), 5000);
   };
 
@@ -1283,7 +1249,7 @@ export default function AdminPortal({
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-slate-300">
-                            {adminCourseContentPages[0] && adminCourseContentPages[0] !== "" && adminCourseContentPages[0] !== "Support de cours - PDF sécurisé."
+                            {adminCourseContent && adminCourseContent !== "" && adminCourseContent !== "Support de cours - PDF sécurisé."
                               ? "✓ Document importé avec succès !" 
                               : "Glisser-déposer votre fichier PDF, Word (.docx) ou Texte (.txt) ici"}
                           </p>
@@ -1297,59 +1263,36 @@ export default function AdminPortal({
                   {adminCourseFileError && (
                     <p className="text-red-400 text-[10px] mt-1 font-semibold">{adminCourseFileError}</p>
                   )}
-                  {adminCourseContentPages[0] && adminCourseContentPages[0] !== "" && adminCourseContentPages[0] !== "Support de cours - PDF sécurisé." && (
+                  {adminCourseContent && adminCourseContent !== "" && adminCourseContent !== "Support de cours - PDF sécurisé." && (
                     <p className="text-emerald-400 text-[10px] mt-1 font-medium">
-                      ✓ {adminCourseContentPages.length} page(s) de contenu prête(s) pour diffusion protégée.
+                      ✓ Contenu extrait avec succès ({adminCourseContent.length} caractères, environ {Math.ceil(adminCourseContent.length / 1500)} page(s) standard).
                     </p>
                   )}
                 </div>
 
-                {/* Multi-page editor (just like teachers) */}
+                {/* Continuous Document Editor */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-semibold text-slate-300">
-                      Contenu écrit des Pages du Cours (Saisie alternative)
+                      Contenu écrit du Document / Livre (Saisie ou modification directe)
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setAdminCourseContentPages([...adminCourseContentPages, ""])}
-                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 font-bold rounded transition flex items-center space-x-1"
-                    >
-                      <span>+ Ajouter une page</span>
-                    </button>
+                    <div className="text-[10px] text-slate-500 font-mono">
+                      {adminCourseContent ? adminCourseContent.split(/\s+/).filter(Boolean).length : 0} mots | {adminCourseContent ? adminCourseContent.length : 0} caractères
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    {adminCourseContentPages.map((pageText, pageIndex) => (
-                      <div key={pageIndex} className="bg-slate-950 p-3 rounded-lg border border-slate-850 space-y-1.5">
-                        <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
-                          <span>Page {pageIndex + 1}</span>
-                          {adminCourseContentPages.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = adminCourseContentPages.filter((_, idx) => idx !== pageIndex);
-                                setAdminCourseContentPages(updated);
-                              }}
-                              className="text-red-400 hover:text-red-300 transition"
-                            >
-                              Supprimer la page
-                            </button>
-                          )}
-                        </div>
-                        <textarea
-                          rows={3}
-                          value={pageText}
-                          onChange={(e) => {
-                            const updated = [...adminCourseContentPages];
-                            updated[pageIndex] = e.target.value;
-                            setAdminCourseContentPages(updated);
-                          }}
-                          placeholder={`Entrez le contenu de la page ${pageIndex + 1} du cours sécurisé...`}
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-850 rounded text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans"
-                        />
-                      </div>
-                    ))}
+                  <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 space-y-2">
+                    <textarea
+                      rows={12}
+                      value={adminCourseContent}
+                      onChange={(e) => setAdminCourseContent(e.target.value)}
+                      placeholder="Collez ou saisissez ici le texte intégral du livre, document, ou support de cours..."
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-850 rounded text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans resize-y min-h-[200px]"
+                    />
+                    <div className="text-[9px] text-slate-500 italic flex justify-between">
+                      <span>✓ Support des livres entiers et documents volumineux sans limite de taille</span>
+                      <span>Moteur de stockage haute performance IndexedDB actif</span>
+                    </div>
                   </div>
                 </div>
 

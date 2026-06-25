@@ -20,8 +20,9 @@ interface CourseViewerProps {
 }
 
 export default function CourseViewer({ course, userMatricule, userCode, isSuperAdmin }: CourseViewerProps) {
-  const [currentPage, setCurrentPage] = useState(0);
   const [showPrintWarning, setShowPrintWarning] = useState(false);
+  const [readingProgress, setReadingProgress] = useState(0);
+  const [activeTocId, setActiveTocId] = useState<string>("");
   
   // Custom interactive PDF Viewer States
   const [zoomLevel, setZoomLevel] = useState<number>(100); // 75, 100, 115, 125, 150
@@ -32,7 +33,7 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
   
   // Customizable Watermark options as requested ("option watermark intégré")
   const [watermarkStyle, setWatermarkStyle] = useState<"diagonal" | "grid" | "split">("diagonal");
-  const [watermarkOpacity, setWatermarkOpacity] = useState<number>(10); // percentage: 5%, 10%, 15%, 20%
+  const [watermarkOpacity, setWatermarkOpacity] = useState<number>(8); // percentage: 4%, 8%, 12%, 16%, 20%
   const [watermarkColor, setWatermarkColor] = useState<"red" | "indigo" | "gray" | "emerald">("red");
   const [watermarkCustomText, setWatermarkCustomText] = useState<string>("");
 
@@ -70,6 +71,16 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
     };
   }, []);
 
+  // Scroll and progress tracker
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    const totalHeight = target.scrollHeight - target.clientHeight;
+    if (totalHeight > 0) {
+      const progress = Math.round((target.scrollTop / totalHeight) * 100);
+      setReadingProgress(progress);
+    }
+  };
+
   const downloadPDFForAdmin = () => {
     if (!isSuperAdmin) return;
     
@@ -96,23 +107,16 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
     doc.setTextColor(100, 116, 139);
     doc.text(`Auteur: ${course.authorName} (${course.authorId})`, 20, 60);
     
-    // Content pages
+    // Content paragraphs
     let currentY = 75;
-    course.content.forEach((pageContent, idx) => {
-      if (idx > 0) {
-        doc.addPage();
-        currentY = 25;
+    const paragraphs = course.content.split("\n");
+    paragraphs.forEach((paragraph) => {
+      if (!paragraph.trim()) {
+        currentY += 4;
+        return;
       }
       
-      doc.setFontSize(12);
-      doc.setTextColor(71, 85, 105); // Slate-600
-      doc.text(`SECTION ${idx + 1}`, 20, currentY);
-      currentY += 10;
-      
-      doc.setFontSize(11);
-      doc.setTextColor(51, 65, 85); // Slate-700
-      
-      const splitLines = doc.splitTextToSize(pageContent, 170);
+      const splitLines = doc.splitTextToSize(paragraph, 170);
       splitLines.forEach((line: string) => {
         if (currentY > 270) {
           doc.addPage();
@@ -121,6 +125,7 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
         doc.text(line, 20, currentY);
         currentY += 7;
       });
+      currentY += 3;
     });
     
     doc.save(`${course.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.pdf`);
@@ -131,18 +136,31 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
     ? `${watermarkCustomText.toUpperCase()} • ${userMatricule} • CODE: ${userCode}`
     : `PROPRIÉTÉ DE ${userMatricule} • ÉLÈVE INSCRIT • CODE: ${userCode} • IP TRACÉ • COPIE STRICTEMENT INTERDITE`;
 
-  // Watermark colors Tailwind mappings
-  const getColorClasses = () => {
+  // Watermark colors mappings
+  const getColorHex = () => {
     switch (watermarkColor) {
-      case "indigo": return "text-indigo-500 border-indigo-500/20";
-      case "emerald": return "text-emerald-500 border-emerald-500/20";
-      case "gray": return "text-slate-400 border-slate-500/20";
-      default: return "text-red-500 border-red-500/20";
+      case "indigo": return "%23818cf8"; // indigo-400
+      case "emerald": return "%2334d399"; // emerald-400
+      case "gray": return "%2394a3b8"; // slate-400
+      default: return "%23f87171"; // red-400
     }
   };
 
-  const getOpacityStyle = () => {
-    return { opacity: watermarkOpacity / 100 };
+  const getSvgWatermarkDataUri = () => {
+    const escapedText = encodeURIComponent(dynamicWatermarkText);
+    const color = getColorHex();
+    const opacity = watermarkOpacity / 100;
+
+    if (watermarkStyle === "diagonal") {
+      // Large diagonal repeating watermark
+      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><text x="30" y="180" font-family="'Inter', sans-serif" font-size="10" font-weight="bold" fill="${color}" fill-opacity="${opacity}" transform="rotate(-28, 30, 180)">${escapedText}</text></svg>`;
+    } else if (watermarkStyle === "grid") {
+      // Dense grid layout
+      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150"><text x="10" y="60" font-family="'Inter', sans-serif" font-size="8" font-weight="extrabold" fill="${color}" fill-opacity="${opacity}" transform="rotate(-15, 10, 60)">HALRO MOBILE SCHOOL</text><text x="10" y="80" font-family="'Inter', sans-serif" font-size="8" font-weight="bold" fill="${color}" fill-opacity="${opacity}" transform="rotate(-15, 10, 80)">${userMatricule}</text></svg>`;
+    } else {
+      // Subtle top/bottom line pattern
+      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="500" height="400"><text x="20" y="30" font-family="monospace" font-size="8" fill="${color}" fill-opacity="${opacity}">SECURE DIGITAL BOOK READER • LICENCIE A : ${userMatricule}</text><text x="20" y="380" font-family="monospace" font-size="8" fill="${color}" fill-opacity="${opacity}">DIFFUSION INTERDITE • CODE : ${userCode} • IP TRACE</text></svg>`;
+    }
   };
 
   // Helper to highlight searched query in the text
@@ -165,18 +183,82 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
     );
   };
 
+  // Parse sections for Table of Contents
+  const getTableOfContents = () => {
+    const lines = course.content.split("\n");
+    const sections: { id: string; title: string; lineIndex: number; level: number }[] = [];
+    let sectionCount = 0;
+
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("#")) {
+        const level = (trimmed.match(/^#+/) || ["#"])[0].length;
+        sectionCount++;
+        const title = trimmed.replace(/^#+\s*/, "");
+        sections.push({
+          id: `sec-${sectionCount}`,
+          title: title || `Titre ${sectionCount}`,
+          lineIndex: idx,
+          level
+        });
+      } else if (/^(chapitre|partie|section|module|cours)\b/i.test(trimmed)) {
+        sectionCount++;
+        sections.push({
+          id: `sec-${sectionCount}`,
+          title: trimmed,
+          lineIndex: idx,
+          level: 1
+        });
+      }
+    });
+
+    if (sections.length === 0) {
+      sections.push({ id: "sec-start", title: "Début du Document", lineIndex: 0, level: 1 });
+    }
+    return sections;
+  };
+
+  const toc = getTableOfContents();
+
+  // Scroll directly to a specific line in the book
+  const scrollToLine = (lineIndex: number, id: string) => {
+    setActiveTocId(id);
+    const canvas = document.getElementById("pdf-document-scroll-canvas");
+    if (canvas) {
+      const paragraphs = canvas.getElementsByClassName("book-paragraph");
+      if (paragraphs && paragraphs[lineIndex]) {
+        paragraphs[lineIndex].scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        // Fallback scrolling based on percentage
+        const totalParagraphs = paragraphs.length;
+        if (totalParagraphs > 0) {
+          const targetIndex = Math.min(lineIndex, totalParagraphs - 1);
+          paragraphs[targetIndex].scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    }
+  };
+
   return (
-    <div id="course-viewer-container" className="relative select-none bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden max-w-5xl mx-auto my-4 w-full text-slate-200 flex flex-col h-[750px]">
+    <div id="course-viewer-container" className="relative select-none bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden max-w-5xl mx-auto my-4 w-full text-slate-200 flex flex-col h-[780px]">
       
+      {/* Dynamic Book Reading Progress Bar */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-slate-900 z-30">
+        <div 
+          className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-300"
+          style={{ width: `${readingProgress}%` }}
+        />
+      </div>
+
       {/* 1. TOP MAIN MENU BAR */}
-      <div className="flex flex-wrap items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800 gap-3 z-10">
+      <div className="flex flex-wrap items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800 gap-3 z-10 pt-4">
         <div className="flex items-center space-x-2.5">
           <button
             onClick={() => setShowSidebar(!showSidebar)}
             className={`p-1.5 rounded-lg border transition ${
               showSidebar ? "bg-indigo-600/20 border-indigo-500/30 text-indigo-400" : "bg-slate-950 border-slate-850 text-slate-400 hover:text-slate-200"
             }`}
-            title="Activer/Désactiver le volet de miniatures"
+            title="Activer/Désactiver la Table des Matières"
           >
             <Layers size={15} />
           </button>
@@ -189,7 +271,7 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
             </div>
             <div>
               <h4 className="font-bold text-xs line-clamp-1 text-slate-100 max-w-[200px] md:max-w-xs">{course.title}</h4>
-              <p className="text-[10px] text-slate-400">Par {course.authorName}</p>
+              <p className="text-[10px] text-slate-400">Livre Numérique de {course.authorName}</p>
             </div>
           </div>
         </div>
@@ -235,8 +317,8 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Rechercher..."
-              className="w-32 bg-slate-950 border border-slate-850 hover:border-slate-800 focus:border-indigo-500 rounded-lg px-2.5 py-1 text-[11px] text-slate-300 placeholder-slate-700 focus:outline-none"
+              placeholder="Rechercher dans l'ouvrage..."
+              className="w-40 bg-slate-950 border border-slate-850 hover:border-slate-800 focus:border-indigo-500 rounded-lg px-2.5 py-1 text-[11px] text-slate-300 placeholder-slate-700 focus:outline-none"
             />
             {searchQuery && (
               <button 
@@ -276,51 +358,52 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
           ) : (
             <div className="flex items-center space-x-1 text-red-400 bg-red-950/20 px-2 py-1 rounded-lg text-[10px] font-extrabold uppercase border border-red-500/10">
               <Lock size={11} className="animate-pulse" />
-              <span>Crypté • Anti-Fuite</span>
+              <span>Livre Sécurisé • Anti-copie</span>
             </div>
           )}
         </div>
       </div>
 
-      {/* 2. BODY LAYOUT: SIDEBAR THUMBNAILS + MAIN VIEWER */}
+      {/* 2. BODY LAYOUT: TABLE OF CONTENTS + CONTINUOUS SCROLL VIEWPORT */}
       <div className="flex flex-1 overflow-hidden relative">
         
-        {/* SIDEBAR: Thumbnails (Miniatures de pages) */}
+        {/* SIDEBAR: Table of Contents (Table des Matières dynamique) */}
         {showSidebar && (
-          <div className="w-56 bg-slate-950 border-r border-slate-900 overflow-y-auto p-4 flex flex-col space-y-4 shrink-0 transition-all duration-300">
-            <h5 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Pages du document</h5>
+          <div className="w-60 bg-slate-950 border-r border-slate-900 overflow-y-auto p-4 flex flex-col space-y-3 shrink-0 transition-all duration-300">
+            <h5 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Table des matières</h5>
             
-            {course.content.map((pageText, idx) => {
-              const isActive = currentPage === idx;
-              return (
-                <div 
-                  key={idx}
-                  onClick={() => setCurrentPage(idx)}
-                  className={`group relative border rounded-xl p-3 cursor-pointer text-left transition ${
-                    isActive 
-                      ? "bg-slate-900 border-indigo-500/50 ring-1 ring-indigo-500/30" 
-                      : "bg-slate-950 border-slate-900 hover:border-slate-800 hover:bg-slate-900/30"
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 mb-1.5">
-                    <span>Page {idx + 1}</span>
-                    {isActive && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>}
-                  </div>
-                  
-                  {/* Miniature text structure */}
-                  <div className="space-y-1 opacity-40 group-hover:opacity-60 transition pointer-events-none">
-                    <div className="h-1.5 bg-slate-700 rounded w-full"></div>
-                    <div className="h-1.5 bg-slate-700 rounded w-5/6"></div>
-                    <div className="h-1.5 bg-slate-700 rounded w-4/6"></div>
-                  </div>
+            <div className="space-y-1">
+              {toc.map((item) => {
+                const isActive = activeTocId === item.id;
+                return (
+                  <button 
+                    key={item.id}
+                    onClick={() => scrollToLine(item.lineIndex, item.id)}
+                    className={`w-full text-left rounded-lg p-2.5 text-xs transition border flex items-start gap-2 ${
+                      isActive 
+                        ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-300 font-semibold" 
+                        : "bg-transparent border-transparent text-slate-400 hover:bg-slate-900/40 hover:text-slate-200"
+                    }`}
+                    style={{ paddingLeft: `${Math.max(10, item.level * 8)}px` }}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${isActive ? "bg-indigo-400 animate-pulse" : "bg-slate-600"}`}></span>
+                    <span className="line-clamp-2 leading-relaxed">{item.title}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-                  {/* Little floating diagonal watermark replica */}
-                  <div className="absolute inset-0 flex items-center justify-center overflow-hidden opacity-5 pointer-events-none text-[8px] text-red-500 font-bold uppercase tracking-widest -rotate-12">
-                    {userMatricule}
-                  </div>
+            <div className="border-t border-slate-900 pt-4 mt-auto">
+              <div className="bg-slate-900/30 rounded-xl p-3 border border-slate-900">
+                <div className="flex justify-between text-[10px] font-semibold text-slate-400 mb-1">
+                  <span>Progression de lecture</span>
+                  <span>{readingProgress}%</span>
                 </div>
-              );
-            })}
+                <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${readingProgress}%` }}></div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -330,7 +413,7 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
             <div className="space-y-5">
               <div className="flex items-center justify-between border-b border-slate-850 pb-3">
                 <div className="flex items-center space-x-2">
-                  <Settings size={15} className="text-amber-400 animate-spin-slow" />
+                  <Settings size={15} className="text-amber-400" />
                   <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">Option Filigrane Intégré</h4>
                 </div>
                 <button
@@ -342,7 +425,7 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
               </div>
 
               <p className="text-[10px] text-slate-400 leading-relaxed">
-                Configurez le filigrane dynamique incrusté sur le support de cours. Ces filigranes identifient votre compte pour des raisons de droits d'auteur.
+                Configurez le filigrane dynamique incrusté de manière permanente en arrière-plan du livre numérique. Ces filigranes tracent la provenance du support de cours.
               </p>
 
               {/* 1. Style selections */}
@@ -371,7 +454,7 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
                         : "bg-slate-950 border-slate-850 text-slate-400 hover:bg-slate-900"
                     }`}
                   >
-                    <span>Grille Dense en Arrière-plan</span>
+                    <span>Grille Dense de Traçage</span>
                     {watermarkStyle === "grid" && <Check size={12} />}
                   </button>
 
@@ -383,7 +466,7 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
                         : "bg-slate-950 border-slate-850 text-slate-400 hover:bg-slate-900"
                     }`}
                   >
-                    <span>Discret (Entêtes & Pied)</span>
+                    <span>Bandes Haut & Bas</span>
                     {watermarkStyle === "split" && <Check size={12} />}
                   </button>
                 </div>
@@ -399,16 +482,16 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
                 </div>
                 <input
                   type="range"
-                  min="5"
-                  max="25"
-                  step="5"
+                  min="4"
+                  max="20"
+                  step="4"
                   value={watermarkOpacity}
                   onChange={(e) => setWatermarkOpacity(Number(e.target.value))}
                   className="w-full accent-amber-500 h-1 bg-slate-950 rounded-lg cursor-pointer"
                 />
                 <div className="flex justify-between text-[8px] text-slate-500">
-                  <span>Très Discret (5%)</span>
-                  <span>Sécurité Maximale (25%)</span>
+                  <span>Discret (4%)</span>
+                  <span>Sécurité (20%)</span>
                 </div>
               </div>
 
@@ -443,14 +526,14 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
               {/* 4. Custom watermark overlay addition */}
               <div className="space-y-2">
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Texte Supplémentaire (Facultatif)
+                  Texte de Protection Supplémentaire
                 </label>
                 <input
                   type="text"
                   maxLength={25}
                   value={watermarkCustomText}
                   onChange={(e) => setWatermarkCustomText(e.target.value)}
-                  placeholder="Ex: CONFIDENTIEL"
+                  placeholder="Ex: DIFFUSION PENALE"
                   className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-850 rounded text-xs text-slate-300 placeholder-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
@@ -459,91 +542,43 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
 
             <div className="border-t border-slate-850 pt-3 mt-6 text-[9px] text-slate-500 flex items-center space-x-1.5">
               <ShieldAlert size={12} className="text-red-400 shrink-0" />
-              <span>Votre code unique de traçabilité ne peut pas être retiré pour des raisons légales de protection intellectuelle.</span>
+              <span>Matricule et clés d'accès indélébiles de manière permanente pour assurer les droits intellectuels.</span>
             </div>
           </div>
         )}
 
-        {/* 3. CENTER VIEWPORT: THE DYNAMIC SECURE PDF DOCUMENT CANVAS */}
-        <div className="flex-1 bg-slate-950 overflow-y-auto p-4 md:p-8 flex justify-center items-start">
-          
+        {/* 3. CENTER VIEWPORT: THE DYNAMIC SECURE PDF DOCUMENT CANVAS (CONTINUOUS SCROLL) */}
+        <div 
+          id="pdf-document-scroll-canvas"
+          onScroll={handleScroll}
+          className="flex-1 bg-slate-950 overflow-y-auto p-4 md:p-8 flex justify-center items-start h-full"
+        >
           <div 
             id="pdf-page-canvas" 
-            className={`relative select-none border rounded-lg shadow-2xl transition-all duration-300 flex flex-col justify-between overflow-hidden shrink-0 ${
+            className={`relative select-none border rounded-xl shadow-2xl transition-all duration-300 flex flex-col justify-between overflow-hidden shrink-0 ${
               isNightMode 
-                ? "bg-slate-900/90 border-slate-800 text-slate-100" 
+                ? "bg-slate-900/95 border-slate-800 text-slate-100" 
                 : "bg-white border-slate-300 text-slate-800"
             }`}
             style={{ 
-              width: `${595 * (zoomLevel / 100)}px`, 
-              minHeight: `${780 * (zoomLevel / 100)}px`,
-              transition: "width 0.2s ease-out, min-height 0.2s ease-out",
+              width: `${640 * (zoomLevel / 100)}px`, 
+              minHeight: "100%",
               WebkitUserSelect: "none", 
               userSelect: "none" 
             }}
           >
-            {/* DYNAMIC WATERMARK OVERLAYS */}
-            
-            {/* Style A: DIAGONAL HEAVY WATERMARKS */}
-            {watermarkStyle === "diagonal" && (
-              <div 
-                className="absolute inset-0 pointer-events-none z-0 flex flex-col justify-between p-12 select-none"
-                style={getOpacityStyle()}
-              >
-                <div className={`text-center font-black tracking-widest uppercase text-xs md:text-sm -rotate-25 transform whitespace-normal break-words py-8 ${getColorClasses()}`}>
-                  {dynamicWatermarkText}
-                </div>
-                <div className={`text-center font-black tracking-widest uppercase text-xs md:text-sm rotate-25 transform whitespace-normal break-words py-8 ${getColorClasses()}`}>
-                  {dynamicWatermarkText}
-                </div>
-                <div className={`text-center font-black tracking-widest uppercase text-xs md:text-sm -rotate-25 transform whitespace-normal break-words py-8 ${getColorClasses()}`}>
-                  {dynamicWatermarkText}
-                </div>
-              </div>
-            )}
-
-            {/* Style B: GRID DENSE PATTERNS */}
-            {watermarkStyle === "grid" && (
-              <div 
-                className="absolute inset-0 pointer-events-none z-0 grid grid-cols-2 grid-rows-4 p-4 gap-4 transform -rotate-12 scale-110 select-none overflow-hidden"
-                style={getOpacityStyle()}
-              >
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div 
-                    key={i} 
-                    className={`flex items-center justify-center text-[10px] font-extrabold tracking-widest text-center uppercase whitespace-normal break-words leading-tight border border-current border-opacity-5 p-2 ${getColorClasses()}`}
-                  >
-                    HALRO MOBILESCHOOL<br />
-                    {userMatricule}<br />
-                    CODE: {userCode}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Style C: DISCRET HEADERS & FOOTERS */}
-            {watermarkStyle === "split" && (
-              <div 
-                className="absolute inset-x-0 inset-y-8 pointer-events-none z-0 flex flex-col justify-between px-6 select-none"
-                style={getOpacityStyle()}
-              >
-                <div className={`border-b text-[9px] font-bold uppercase tracking-widest pb-1 flex justify-between ${getColorClasses()}`}>
-                  <span>SECURE DIGITAL READER</span>
-                  <span>LICENCIÉ À : {userMatricule}</span>
-                </div>
-                <div className={`text-center font-extrabold text-[15px] tracking-widest rotate-12 uppercase opacity-10 ${getColorClasses()}`}>
-                  DIFFUSION INTERDITE
-                </div>
-                <div className={`border-t text-[9px] font-bold uppercase tracking-widest pt-1 flex justify-between ${getColorClasses()}`}>
-                  <span>CODE D'ACCÈS : {userCode}</span>
-                  <span>IP DE CONNEXION TRACÉ</span>
-                </div>
-              </div>
-            )}
+            {/* CONTINUOUS SVG GRID WATERMARK OVERLAY */}
+            <div 
+              className="absolute inset-0 pointer-events-none z-0"
+              style={{ 
+                backgroundImage: `url('${getSvgWatermarkDataUri()}')`,
+                backgroundRepeat: 'repeat',
+              }}
+            />
 
             {/* SECURITY VIOLATION OVERLAY (Ctrl+P blocking) */}
             {showPrintWarning && (
-              <div className="absolute inset-0 bg-red-950/95 flex flex-col items-center justify-center text-center p-6 z-50 animate-fade-in">
+              <div className="fixed inset-0 bg-red-950/95 flex flex-col items-center justify-center text-center p-6 z-50 animate-fade-in">
                 <ShieldAlert size={48} className="text-red-500 mb-3 animate-bounce" />
                 <h3 className="text-lg font-bold text-red-400">TENTATIVE D'IMPRESSION BLOQUÉE</h3>
                 <p className="text-xs text-slate-300 mt-2 max-w-sm">
@@ -554,98 +589,125 @@ export default function CourseViewer({ course, userMatricule, userCode, isSuperA
             )}
 
             {/* THE ACTUAL DOCUMENT CONTENT */}
-            <div className="relative z-10 flex-1 flex flex-col p-8 md:p-12">
+            <div className="relative z-10 flex-1 flex flex-col p-8 md:p-14">
               
               {/* Document Header */}
-              <div className="flex items-center justify-between border-b border-slate-500/20 pb-3 mb-6 text-[10px] font-mono tracking-wider opacity-60">
-                <span>SUPPORT PEDAGOGIQUE NUMÉRIQUE</span>
-                <span>ID: {course.id}</span>
+              <div className="flex items-center justify-between border-b border-slate-500/20 pb-3 mb-8 text-[10px] font-mono tracking-wider opacity-60">
+                <span>SUPPORT PÉDAGOGIQUE NUMÉRIQUE - HALRO MOBILE SCHOOL</span>
+                <span>DOC_ID: {course.id}</span>
               </div>
 
-              {/* Title & Auteur Info on first page */}
-              {currentPage === 0 && (
-                <div className="mb-6 space-y-2">
-                  <h1 className="text-lg md:text-xl font-extrabold tracking-tight">
-                    {course.title}
-                  </h1>
-                  <div className="flex items-center space-x-2 text-xs opacity-75">
-                    <span className="font-semibold text-indigo-400">Enseignant : {course.authorName}</span>
-                    <span>•</span>
-                    <span>Publié le {new Date(course.createdAt).toLocaleDateString("fr-FR")}</span>
-                  </div>
-                  <hr className="border-slate-500/10" />
+              {/* Title & Author Info block */}
+              <div className="mb-8 space-y-3">
+                <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-indigo-500/10 text-indigo-400 rounded-full text-[10px] font-bold uppercase tracking-wider border border-indigo-500/10">
+                  <FileText size={10} />
+                  <span>Document / Ouvrage Complet</span>
                 </div>
-              )}
+                <h1 className="text-xl md:text-2xl font-black tracking-tight leading-tight">
+                  {course.title}
+                </h1>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs opacity-80">
+                  <span className="font-semibold text-indigo-400">Auteur / Enseignant : {course.authorName}</span>
+                  <span className="opacity-40">•</span>
+                  <span>Publié le {new Date(course.createdAt).toLocaleDateString("fr-FR")}</span>
+                  <span className="opacity-40">•</span>
+                  <span className="text-emerald-400 font-mono text-[10px]">{course.content.length} caractères</span>
+                </div>
+                <hr className="border-slate-500/10" />
+              </div>
 
               {/* Printable-like Text Layout with line numbers on left */}
-              <div className="flex-1 flex space-x-4">
+              <div className="flex-1 flex space-x-2">
                 
-                {/* Legal-style Line Numbers */}
-                <div className="font-mono text-[10px] text-slate-500 select-none opacity-40 text-right pr-2 space-y-1 border-r border-slate-500/10 hidden sm:block">
-                  {Array.from({ length: 18 }).map((_, index) => (
-                    <div key={index}>{String(index + 1).padStart(2, "0")}</div>
-                  ))}
-                </div>
+                {/* Render Text content paragraph by paragraph with scrolling anchors */}
+                <div className="flex-1 space-y-6">
+                  {course.content.split("\n").map((paragraph, idx) => {
+                    const isHeading = paragraph.trim().startsWith("#");
+                    const headingText = paragraph.replace(/^#+\s*/, "").trim();
+                    const headingLevel = isHeading ? (paragraph.match(/^#+/) || ["#"])[0].length : 0;
 
-                {/* Render Text content with search highlighter */}
-                <div className="flex-1">
-                  <div className={`prose max-w-none text-xs md:text-sm leading-relaxed whitespace-pre-wrap font-sans select-none ${
-                    isNightMode ? "text-slate-200" : "text-slate-800"
-                  }`}>
-                    {course.content[currentPage] ? (
-                      renderHighlightedContent(course.content[currentPage])
-                    ) : (
-                      <div className="text-center py-12 text-slate-500 flex flex-col items-center">
-                        <EyeOff size={32} className="mb-2 text-slate-600" />
-                        <p>Cette page n'a pas de contenu rédigé.</p>
-                      </div>
-                    )}
-                  </div>
+                    if (isHeading) {
+                      if (headingLevel === 1) {
+                        return (
+                          <h2 
+                            key={idx} 
+                            className="book-paragraph text-lg md:text-xl font-bold tracking-tight text-indigo-400 mt-8 mb-4 border-b border-slate-500/10 pb-2 scroll-mt-24"
+                          >
+                            {renderHighlightedContent(headingText)}
+                          </h2>
+                        );
+                      } else if (headingLevel === 2) {
+                        return (
+                          <h3 
+                            key={idx} 
+                            className="book-paragraph text-base md:text-lg font-bold tracking-tight text-emerald-400 mt-6 mb-3 scroll-mt-24"
+                          >
+                            {renderHighlightedContent(headingText)}
+                          </h3>
+                        );
+                      } else {
+                        return (
+                          <h4 
+                            key={idx} 
+                            className="book-paragraph text-sm md:text-base font-bold tracking-tight text-purple-400 mt-4 mb-2 scroll-mt-24"
+                          >
+                            {renderHighlightedContent(headingText)}
+                          </h4>
+                        );
+                      }
+                    }
+
+                    if (!paragraph.trim()) {
+                      return <div key={idx} className="h-2"></div>;
+                    }
+
+                    return (
+                      <p 
+                        key={idx} 
+                        className={`book-paragraph text-xs md:text-sm leading-relaxed whitespace-pre-wrap font-sans text-justify scroll-mt-24 ${
+                          isNightMode ? "text-slate-200" : "text-slate-800"
+                        }`}
+                      >
+                        {renderHighlightedContent(paragraph)}
+                      </p>
+                    );
+                  })}
                 </div>
 
               </div>
 
               {/* Document Footer */}
-              <div className="flex items-center justify-between border-t border-slate-500/15 pt-3 mt-6 text-[9px] font-mono opacity-50">
+              <div className="flex items-center justify-between border-t border-slate-500/15 pt-4 mt-12 text-[9px] font-mono opacity-50">
                 <span>HALRO MOBILE SCHOOL</span>
-                <span className="font-bold">Page {currentPage + 1} de {course.content.length}</span>
+                <span className="font-bold">Fin de l'ouvrage</span>
               </div>
 
             </div>
 
             {/* Static Trace Security warning footer inside Page */}
             <div className="relative z-10 bg-red-950/20 border-t border-red-900/10 p-2 text-center text-[8px] tracking-wider text-red-400 font-mono">
-              FILIGRANE EXCLUSIF ET INDÉLÉBILE • LICENCIÉ À : {userMatricule} ({userCode}) • TOUTE REPRODUCTIONS SANCTIONNÉES
+              FILIGRANE EXCLUSIF ET INDÉLÉBILE • LICENCIÉ À : {userMatricule} ({userCode}) • TOUTE REPRODUCTION SANCTIONNÉE PAR LA LOI
             </div>
 
           </div>
-
         </div>
 
       </div>
 
-      {/* 4. BOTTOM PAGINATION FOOTER */}
+      {/* 4. BOTTOM CONTINUOUS NAV FOOTER */}
       <div className="flex items-center justify-between px-4 py-3.5 bg-slate-900 border-t border-slate-800 z-10">
-        <button
-          onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
-          disabled={currentPage === 0}
-          className="flex items-center space-x-1 px-3 py-1.5 bg-slate-950 hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-slate-950 text-slate-200 rounded-lg text-xs transition font-semibold border border-slate-800"
-        >
-          <ChevronLeft size={14} />
-          <span>Précédent</span>
-        </button>
-
-        <span className="text-xs text-slate-400 font-bold">
-          Page <strong className="text-indigo-400 font-extrabold">{currentPage + 1}</strong> sur <strong className="text-slate-300 font-bold">{course.content.length}</strong>
-        </span>
+        <div className="text-xs text-slate-400 font-medium">
+          Lecture : <strong className="text-indigo-400 font-extrabold">{readingProgress}%</strong> complété
+        </div>
 
         <button
-          onClick={() => setCurrentPage(prev => Math.min(course.content.length - 1, prev + 1))}
-          disabled={currentPage === course.content.length - 1}
-          className="flex items-center space-x-1 px-3 py-1.5 bg-slate-950 hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-slate-950 text-slate-200 rounded-lg text-xs transition font-semibold border border-slate-800"
+          onClick={() => {
+            const canvas = document.getElementById("pdf-document-scroll-canvas");
+            if (canvas) canvas.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className="flex items-center space-x-1 px-3 py-1.5 bg-slate-950 hover:bg-slate-800 text-slate-200 rounded-lg text-xs transition font-semibold border border-slate-800"
         >
-          <span>Suivant</span>
-          <ChevronRight size={14} />
+          <span>Remonter en haut</span>
         </button>
       </div>
 

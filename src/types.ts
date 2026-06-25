@@ -15,7 +15,7 @@ export interface Course {
   title: string;
   authorId: string; // Teacher Matricule / ID
   authorName: string;
-  content: string[]; // List of page contents to support page-by-page viewing and protection
+  content: string; // Le contenu complet du document de cours pour une lecture continue
   createdAt: string;
 }
 
