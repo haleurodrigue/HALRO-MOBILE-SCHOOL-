@@ -114,7 +114,9 @@ interface AdminPortalProps {
   superAdminCode: string;
   productionLock: "none" | "student" | "teacher" | "admin";
   onAddClass: (newClass: Class) => void;
+  onDeleteClass?: (classId: string) => void;
   onAddTeacher: (newTeacher: Teacher) => void;
+  onDeleteTeacher?: (teacherId: string) => void;
   onUpdateTeachers: (updated: Teacher[]) => void;
   onGenerateCode: (newCode: StudentCode, commissionDetails?: string) => void;
   onUpdateCodes: (updated: StudentCode[]) => void;
@@ -135,7 +137,9 @@ export default function AdminPortal({
   superAdminCode,
   productionLock,
   onAddClass,
+  onDeleteClass,
   onAddTeacher,
+  onDeleteTeacher,
   onUpdateTeachers,
   onGenerateCode,
   onUpdateCodes,
@@ -789,6 +793,7 @@ export default function AdminPortal({
               userMatricule="ADMIN-PRINCIPAL"
               userCode={password}
               isSuperAdmin={true}
+              onClose={() => setViewedCourse(null)}
             />
           </div>
         ) : activeTab === "dashboard" ? (
@@ -830,12 +835,27 @@ export default function AdminPortal({
                   return (
                     <div key={cl.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow flex flex-col justify-between">
                       <div>
-                        <div className="flex items-start justify-between border-b border-slate-800 pb-2 mb-3">
-                          <div>
-                            <h4 className="text-sm font-bold text-slate-100">{cl.name}</h4>
+                        <div className="flex items-start justify-between border-b border-slate-800 pb-2 mb-3 gap-2">
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-sm font-bold text-slate-100">{cl.name}</h4>
+                              {onDeleteClass && (
+                                <button
+                                  onClick={() => {
+                                    if (window.confirm(`Voulez-vous supprimer définitivement la classe "${cl.name}" ?`)) {
+                                      onDeleteClass(cl.id);
+                                    }
+                                  }}
+                                  className="text-slate-500 hover:text-red-400 p-1 rounded transition ml-2 shrink-0"
+                                  title="Supprimer la classe"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
                             <p className="text-[10px] text-slate-400 mt-0.5">{cl.description}</p>
                           </div>
-                          <span className="text-[10px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full font-bold">
+                          <span className="text-[10px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full font-bold shrink-0 self-start">
                             {enrolledCount} Élève(s) d'un an
                           </span>
                         </div>
@@ -1085,6 +1105,7 @@ export default function AdminPortal({
                       <th className="py-2">Solde Actuel</th>
                       <th className="py-2">Coordonnées de paiement</th>
                       <th className="py-2">Autorisations</th>
+                      <th className="py-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-850">
@@ -1128,6 +1149,21 @@ export default function AdminPortal({
                               Gérer Élèves
                             </span>
                           </div>
+                        </td>
+                        <td className="py-3">
+                          {onDeleteTeacher && (
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Êtes-vous sûr de vouloir supprimer définitivement l'enseignant M. ${teacher.name} ${teacher.surname} ?`)) {
+                                  onDeleteTeacher(teacher.id);
+                                }
+                              }}
+                              className="text-slate-500 hover:text-red-400 p-1 rounded transition"
+                              title="Supprimer cet enseignant"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

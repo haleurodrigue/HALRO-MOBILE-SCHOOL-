@@ -112,6 +112,7 @@ interface TeacherPortalProps {
   onGenerateCode: (newCode: StudentCode) => void;
   onUpdateCodes: (updatedCodes: StudentCode[]) => void;
   onSendPayoutRequest: (request: PayoutRequest) => void;
+  onDeleteTeacher?: (teacherId: string) => void;
 }
 
 export default function TeacherPortal({
@@ -123,7 +124,8 @@ export default function TeacherPortal({
   onAddCourse,
   onGenerateCode,
   onUpdateCodes,
-  onSendPayoutRequest
+  onSendPayoutRequest,
+  onDeleteTeacher
 }: TeacherPortalProps) {
   const [loginMatricule, setLoginMatricule] = useState("");
   const [activeTeacher, setActiveTeacher] = useState<Teacher | null>(null);
@@ -429,14 +431,39 @@ export default function TeacherPortal({
           </button>
         </div>
 
-        <button
-          id="btn-teacher-logout"
-          onClick={handleLogout}
-          className="flex items-center space-x-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 rounded-lg text-xs font-medium transition self-start md:self-auto"
-        >
-          <LogOut size={12} />
-          <span>Quitter</span>
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2 self-start md:self-auto">
+          <button
+            id="btn-teacher-logout"
+            onClick={handleLogout}
+            className="flex items-center justify-center space-x-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 rounded-lg text-xs font-medium transition"
+          >
+            <LogOut size={12} />
+            <span>Quitter</span>
+          </button>
+
+          <button
+            id="btn-teacher-unsubscribe"
+            onClick={() => {
+              if (!activeTeacher) return;
+              const confirm1 = window.confirm("ATTENTION : Cette action est IRREVERSIBLE. Êtes-vous sûr de vouloir vous désabonner définitivement de HALRO MOBILE SCHOOL ? Votre profil enseignant sera supprimé et vous perdrez l'accès à vos cours.");
+              if (!confirm1) return;
+              const confirm2 = window.confirm("Dernière confirmation : En cliquant sur OK, vous supprimez définitivement votre compte d'enseignant. Vos cours ne seront plus modifiables par vous. Continuer ?");
+              if (!confirm2) return;
+
+              if (onDeleteTeacher) {
+                onDeleteTeacher(activeTeacher.id);
+              }
+              setActiveTeacher(null);
+              setLoginMatricule("");
+              alert("Désabonnement réussi. Votre compte a été définitivement supprimé de la plateforme.");
+            }}
+            className="flex items-center justify-center space-x-1 px-3 py-1.5 bg-red-950/40 hover:bg-red-950/60 text-red-400 hover:text-red-300 border border-red-900/30 rounded-lg text-xs font-bold transition"
+            title="Se désabonner définitivement de la plateforme"
+          >
+            <Trash2 size={12} />
+            <span>Se désabonner</span>
+          </button>
+        </div>
       </div>
 
       {payoutSuccess && (

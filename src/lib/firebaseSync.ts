@@ -12,16 +12,32 @@ export async function saveClassToFirestore(cls: Class): Promise<void> {
   await setDoc(doc(db, "classes", cls.id), cls);
 }
 
+export async function deleteClassFromFirestore(classId: string): Promise<void> {
+  await deleteDoc(doc(db, "classes", classId));
+}
+
 export async function saveCourseToFirestore(course: Course): Promise<void> {
   await setDoc(doc(db, "courses", course.id), course);
+}
+
+export async function deleteCourseFromFirestore(courseId: string): Promise<void> {
+  await deleteDoc(doc(db, "courses", courseId));
 }
 
 export async function saveTeacherToFirestore(teacher: Teacher): Promise<void> {
   await setDoc(doc(db, "teachers", teacher.id), teacher);
 }
 
+export async function deleteTeacherFromFirestore(teacherId: string): Promise<void> {
+  await deleteDoc(doc(db, "teachers", teacherId));
+}
+
 export async function saveStudentCodeToFirestore(code: StudentCode): Promise<void> {
   await setDoc(doc(db, "studentCodes", code.id), code);
+}
+
+export async function deleteStudentCodeFromFirestore(codeId: string): Promise<void> {
+  await deleteDoc(doc(db, "studentCodes", codeId));
 }
 
 export async function savePayoutRequestToFirestore(payout: PayoutRequest): Promise<void> {

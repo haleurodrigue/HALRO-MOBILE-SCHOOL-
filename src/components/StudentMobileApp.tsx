@@ -18,6 +18,7 @@ interface StudentMobileAppProps {
   currentDeviceId: string;
   isOnline: boolean;
   onUpdateCodes: (updatedCodes: StudentCode[]) => void;
+  onDeleteCode?: (codeId: string) => void;
   onBackToPortal?: () => void;
 }
 
@@ -28,6 +29,7 @@ export default function StudentMobileApp({
   currentDeviceId,
   isOnline,
   onUpdateCodes,
+  onDeleteCode,
   onBackToPortal
 }: StudentMobileAppProps) {
   const [inputCode, setInputCode] = useState("");
@@ -314,6 +316,8 @@ export default function StudentMobileApp({
                     userMatricule={activeCode.matricule}
                     userCode={activeCode.code}
                     isSuperAdmin={false}
+                    studentName={activeCode.studentName}
+                    onClose={() => setSelectedCourse(null)}
                   />
                 </div>
               </div>
@@ -419,6 +423,32 @@ export default function StudentMobileApp({
                   className="mt-6 w-full py-2 bg-slate-900 hover:bg-slate-850 text-xs font-semibold text-slate-400 hover:text-slate-200 border border-slate-850 rounded-xl transition"
                 >
                   Déconnexion
+                </button>
+
+                <button
+                  id="student-unsubscribe-btn"
+                  onClick={() => {
+                    if (!activeCode) return;
+                    const confirm1 = window.confirm("ATTENTION : Cette action est IRREVERSIBLE. Êtes-vous sûr de vouloir vous désabonner définitivement de HALRO MOBILE SCHOOL ? Votre code sera supprimé et vous perdrez tout accès.");
+                    if (!confirm1) return;
+                    const confirm2 = window.confirm("Dernière confirmation : En cliquant sur OK, vous supprimez définitivement votre abonnement. Êtes-vous absolument sûr ?");
+                    if (!confirm2) return;
+                    
+                    if (onDeleteCode) {
+                      onDeleteCode(activeCode.id);
+                    } else {
+                      const updated = studentCodes.filter(c => c.id !== activeCode.id);
+                      onUpdateCodes(updated);
+                    }
+                    setActiveCode(null);
+                    setSelectedClass(null);
+                    setSelectedCourse(null);
+                    setInputCode("");
+                    alert("Désabonnement réussi. Votre accès a été supprimé de la plateforme.");
+                  }}
+                  className="mt-2 w-full py-2 bg-red-950/20 hover:bg-red-950/40 text-xs font-semibold text-red-400 hover:text-red-300 border border-red-900/30 rounded-xl transition"
+                >
+                  Se désabonner définitivement
                 </button>
               </div>
             )}

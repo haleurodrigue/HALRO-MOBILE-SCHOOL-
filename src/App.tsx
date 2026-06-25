@@ -22,9 +22,12 @@ import { testFirestoreConnection } from "./lib/firebase";
 import { 
   loadAllDataFromFirestore, 
   saveClassToFirestore, 
+  deleteClassFromFirestore,
   saveCourseToFirestore, 
   saveTeacherToFirestore, 
+  deleteTeacherFromFirestore,
   saveStudentCodeToFirestore, 
+  deleteStudentCodeFromFirestore,
   savePayoutRequestToFirestore, 
   saveInvoiceToFirestore,
   resetFirestore
@@ -294,6 +297,13 @@ export default function App() {
     }
   };
 
+  const handleDeleteClass = (classId: string) => {
+    setClasses(prev => prev.filter(c => c.id !== classId));
+    if (isOnline && !simulateOffline) {
+      deleteClassFromFirestore(classId).catch(e => console.error("Firestore sync failed", e));
+    }
+  };
+
   // Super Admin / Teacher action: Add Course
   const handleAddCourse = (newCourse: Course) => {
     setCourses(prev => [...prev, newCourse]);
@@ -317,11 +327,25 @@ export default function App() {
     }
   };
 
+  const handleDeleteTeacher = (teacherId: string) => {
+    setTeachers(prev => prev.filter(t => t.id !== teacherId));
+    if (isOnline && !simulateOffline) {
+      deleteTeacherFromFirestore(teacherId).catch(e => console.error("Firestore sync failed", e));
+    }
+  };
+
   // Super Admin / Teacher action: update student codes
   const handleUpdateStudentCodes = (updated: StudentCode[]) => {
     setStudentCodes(updated);
     if (isOnline && !simulateOffline) {
       updated.forEach(c => saveStudentCodeToFirestore(c).catch(e => console.error("Firestore sync failed", e)));
+    }
+  };
+
+  const handleDeleteStudentCode = (codeId: string) => {
+    setStudentCodes(prev => prev.filter(c => c.id !== codeId));
+    if (isOnline && !simulateOffline) {
+      deleteStudentCodeFromFirestore(codeId).catch(e => console.error("Firestore sync failed", e));
     }
   };
 
@@ -749,6 +773,7 @@ export default function App() {
                 currentDeviceId={currentDeviceId}
                 isOnline={isOnline && !simulateOffline}
                 onUpdateCodes={handleUpdateStudentCodes}
+                onDeleteCode={handleDeleteStudentCode}
                 onBackToPortal={() => setActivePortal("portal")}
               />
             </div>
@@ -785,6 +810,7 @@ export default function App() {
                 onGenerateCode={handleGenerateCode}
                 onUpdateCodes={handleUpdateStudentCodes}
                 onSendPayoutRequest={handleSendPayoutRequest}
+                onDeleteTeacher={handleDeleteTeacher}
               />
             </div>
           )}
@@ -820,7 +846,9 @@ export default function App() {
                 superAdminCode={superAdminCode}
                 productionLock={productionLock}
                 onAddClass={handleAddClass}
+                onDeleteClass={handleDeleteClass}
                 onAddTeacher={handleAddTeacher}
+                onDeleteTeacher={handleDeleteTeacher}
                 onUpdateTeachers={handleUpdateTeachers}
                 onGenerateCode={handleGenerateCode}
                 onUpdateCodes={handleUpdateStudentCodes}
