@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   BookOpen, Users, Key, Shield, Smartphone, Monitor, Info, 
-  Wifi, WifiOff, RefreshCw, AlertTriangle, HelpCircle, HardDriveDownload
+  Wifi, WifiOff, RefreshCw, AlertTriangle, HelpCircle, HardDriveDownload, Lock, Wrench
 } from "lucide-react";
 import { 
   Class, Course, Teacher, StudentCode, PayoutRequest, Invoice 
@@ -49,6 +49,14 @@ export default function App() {
 
   // Sandbox Mode: when false, rapid switchers and offline simulation are hidden for security on other devices
   const [sandboxModeEnabled, setSandboxModeEnabled] = useState<boolean>(false);
+
+  // Maintenance Mode: when true, a professional maintenance screen block is displayed for all non-admin users
+  const [maintenanceModeEnabled, setMaintenanceModeEnabled] = useState<boolean>(false);
+  const [isMaintenanceBypassed, setIsMaintenanceBypassed] = useState<boolean>(() => {
+    return localStorage.getItem("halro_bypass_maintenance") === "true";
+  });
+  const [maintenanceCodeInput, setMaintenanceCodeInput] = useState("");
+  const [maintenanceError, setMaintenanceError] = useState("");
 
   // Main Persistent State
   const [classes, setClasses] = useState<Class[]>([]);
@@ -109,8 +117,10 @@ export default function App() {
             const settings = await loadSettingsFromFirestore();
             setSuperAdminCode(settings.superAdminCode);
             setSandboxModeEnabled(settings.sandboxModeEnabled);
+            setMaintenanceModeEnabled(!!settings.maintenanceModeEnabled);
             localStorage.setItem("halro_admin_code", settings.superAdminCode);
             localStorage.setItem("halro_sandbox_mode_enabled", JSON.stringify(settings.sandboxModeEnabled));
+            localStorage.setItem("halro_maintenance_mode_enabled", JSON.stringify(!!settings.maintenanceModeEnabled));
           } catch (e) {
             console.error("Failed to load settings from Firestore, using local:", e);
           }
@@ -241,6 +251,7 @@ export default function App() {
       const storedAdminCode = localStorage.getItem("halro_admin_code");
       const storedLock = localStorage.getItem("halro_production_lock");
       const storedSandboxMode = localStorage.getItem("halro_sandbox_mode_enabled");
+      const storedMaintenanceMode = localStorage.getItem("halro_maintenance_mode_enabled");
 
       if (storedAdminCode) setSuperAdminCode(storedAdminCode);
       else setSuperAdminCode("admin1234");
@@ -253,6 +264,16 @@ export default function App() {
         }
       } else {
         setSandboxModeEnabled(false);
+      }
+
+      if (storedMaintenanceMode) {
+        try {
+          setMaintenanceModeEnabled(JSON.parse(storedMaintenanceMode));
+        } catch (e) {
+          setMaintenanceModeEnabled(false);
+        }
+      } else {
+        setMaintenanceModeEnabled(false);
       }
 
       if (storedLock) {
@@ -465,7 +486,7 @@ export default function App() {
   const handleUpdateSuperAdminCode = (newCode: string) => {
     setSuperAdminCode(newCode);
     if (isOnline && !simulateOffline) {
-      saveSettingsToFirestore({ superAdminCode: newCode, sandboxModeEnabled }).catch(e => console.error("Firestore sync failed for settings", e));
+      saveSettingsToFirestore({ superAdminCode: newCode, sandboxModeEnabled, maintenanceModeEnabled }).catch(e => console.error("Firestore sync failed for settings", e));
     }
   };
 
@@ -474,7 +495,20 @@ export default function App() {
     setSandboxModeEnabled(enabled);
     localStorage.setItem("halro_sandbox_mode_enabled", JSON.stringify(enabled));
     if (isOnline && !simulateOffline) {
-      saveSettingsToFirestore({ superAdminCode, sandboxModeEnabled: enabled }).catch(e => console.error("Firestore sync failed for settings", e));
+      saveSettingsToFirestore({ superAdminCode, sandboxModeEnabled: enabled, maintenanceModeEnabled }).catch(e => console.error("Firestore sync failed for settings", e));
+    }
+  };
+
+  // Super Admin action: Update Maintenance Mode
+  const handleUpdateMaintenanceMode = (enabled: boolean) => {
+    setMaintenanceModeEnabled(enabled);
+    localStorage.setItem("halro_maintenance_mode_enabled", JSON.stringify(enabled));
+    if (enabled) {
+      setIsMaintenanceBypassed(true);
+      localStorage.setItem("halro_bypass_maintenance", "true");
+    }
+    if (isOnline && !simulateOffline) {
+      saveSettingsToFirestore({ superAdminCode, sandboxModeEnabled, maintenanceModeEnabled: enabled }).catch(e => console.error("Firestore sync failed for settings", e));
     }
   };
 
@@ -687,7 +721,84 @@ export default function App() {
         {/* Dynamic Route/Tab Container */}
         <div className="relative animate-fade-in min-h-[500px]">
           
-          {/* PORTAL LANDING SCREEN */}
+          {maintenanceModeEnabled && !isMaintenanceBypassed ? (
+            <div id="maintenance-mode-screen" className="max-w-2xl mx-auto py-12 px-6 bg-slate-900/40 border border-slate-850 rounded-3xl text-center space-y-6 shadow-2xl animate-fade-in my-10">
+              <div className="w-16 h-16 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <Wrench size={32} />
+              </div>
+              
+              <div className="space-y-2">
+                <span className="inline-flex items-center space-x-1.5 px-3 py-1 bg-amber-950/60 text-amber-400 rounded-full border border-amber-900/30 text-[11px] font-black tracking-widest uppercase animate-pulse">
+                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-ping"></span>
+                  <span>Maintenance Active</span>
+                </span>
+                <h2 className="text-2xl md:text-3xl font-black text-white">Application Temporairement Indisponible</h2>
+                <p className="text-xs md:text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
+                  HALRO Mobile School fait l'objet de travaux d'amélioration et de mises à jour pour préparer les nouveaux supports de cours de manière sécurisée.
+                </p>
+              </div>
+
+              <div className="p-4 bg-slate-950/50 border border-slate-850/60 rounded-2xl max-w-md mx-auto text-left space-y-1.5">
+                <p className="text-[11px] text-slate-400 leading-relaxed font-sans flex items-start gap-2">
+                  <span className="text-emerald-400 font-bold">✓</span>
+                  <span>Vos cours, licences et documents sont conservés en toute sécurité.</span>
+                </p>
+                <p className="text-[11px] text-slate-400 leading-relaxed font-sans flex items-start gap-2">
+                  <span className="text-emerald-400 font-bold">✓</span>
+                  <span>Le service d'études reprendra dès la fin des opérations de modification.</span>
+                </p>
+              </div>
+
+              {/* Developer / Admin override login */}
+              <div className="border-t border-slate-800/60 pt-6 max-w-md mx-auto space-y-4">
+                <div className="flex items-center justify-center space-x-2 text-xs text-slate-400">
+                  <Lock size={14} className="text-slate-500" />
+                  <span>Accès Administration & Développement</span>
+                </div>
+                
+                <form 
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (maintenanceCodeInput === superAdminCode) {
+                      setIsMaintenanceBypassed(true);
+                      localStorage.setItem("halro_bypass_maintenance", "true");
+                      setMaintenanceError("");
+                    } else {
+                      setMaintenanceError("Code administrateur incorrect.");
+                    }
+                  }}
+                  className="space-y-3"
+                >
+                  <div className="relative">
+                    <input
+                      type="password"
+                      placeholder="Saisir le Code Super Admin"
+                      value={maintenanceCodeInput}
+                      onChange={(e) => setMaintenanceCodeInput(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-center text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all font-mono tracking-widest"
+                    />
+                  </div>
+                  
+                  {maintenanceError && (
+                    <p className="text-[10px] text-red-500 font-bold animate-pulse">{maintenanceError}</p>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-bold text-xs rounded-xl transition duration-200"
+                  >
+                    Déverrouiller pour Maintenance/Développement
+                  </button>
+                </form>
+              </div>
+              
+              <p className="text-[10px] text-slate-600 font-mono">
+                HALRO Mobile School • Protection Active
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* PORTAL LANDING SCREEN */}
           {activePortal === "portal" && (
             <div id="portal-landing-page" className="max-w-6xl mx-auto py-4 space-y-6 animate-fade-in">
               
@@ -826,6 +937,8 @@ export default function App() {
                       onUpdateCourses={handleUpdateCourses}
                       sandboxModeEnabled={sandboxModeEnabled}
                       onUpdateSandboxMode={handleUpdateSandboxMode}
+                      maintenanceModeEnabled={maintenanceModeEnabled}
+                      onUpdateMaintenanceMode={handleUpdateMaintenanceMode}
                     />
                   </div>
                 </div>
@@ -993,8 +1106,12 @@ export default function App() {
                 onUpdateCourses={handleUpdateCourses}
                 sandboxModeEnabled={sandboxModeEnabled}
                 onUpdateSandboxMode={handleUpdateSandboxMode}
+                maintenanceModeEnabled={maintenanceModeEnabled}
+                onUpdateMaintenanceMode={handleUpdateMaintenanceMode}
               />
             </div>
+          )}
+          </>
           )}
         </div>
 

@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   PlusCircle, Users, BookOpen, Key, DollarSign, Settings, Bell, CheckCircle, 
-  Trash2, ShieldCheck, FileText, Download, ShieldAlert, Lock, ToggleLeft, ToggleRight, ArrowRight, Clipboard, RefreshCw
+  Trash2, ShieldCheck, FileText, Download, ShieldAlert, Lock, ToggleLeft, ToggleRight, ArrowRight, Clipboard, RefreshCw, AlertTriangle
 } from "lucide-react";
 import { Class, Course, Teacher, StudentCode, PayoutRequest, Invoice, AccessCodeType } from "../types";
 import { jsPDF } from "jspdf";
@@ -127,6 +127,8 @@ interface AdminPortalProps {
   onUpdateCourses: (updated: Course[]) => void;
   sandboxModeEnabled: boolean;
   onUpdateSandboxMode: (enabled: boolean) => void;
+  maintenanceModeEnabled: boolean;
+  onUpdateMaintenanceMode: (enabled: boolean) => void;
 }
 
 export default function AdminPortal({
@@ -151,7 +153,9 @@ export default function AdminPortal({
   onAddCourse,
   onUpdateCourses,
   sandboxModeEnabled,
-  onUpdateSandboxMode
+  onUpdateSandboxMode,
+  maintenanceModeEnabled,
+  onUpdateMaintenanceMode
 }: AdminPortalProps) {
   const [password, setPassword] = useState("");
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -259,6 +263,7 @@ export default function AdminPortal({
 
     if (password.trim() === superAdminCode) {
       setIsAuthorized(true);
+      localStorage.setItem("halro_bypass_maintenance", "true");
     } else {
       setLoginError("Code d'accès incorrect. Veuillez réessayer.");
     }
@@ -268,6 +273,7 @@ export default function AdminPortal({
     setIsAuthorized(false);
     setPassword("");
     setViewedCourse(null);
+    localStorage.removeItem("halro_bypass_maintenance");
   };
 
   if (!isAuthorized) {
@@ -1847,6 +1853,51 @@ export default function AdminPortal({
               >
                 {sandboxModeEnabled ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
                 <span>{sandboxModeEnabled ? "Désactiver le Mode Bac à Sable" : "Activer le Mode Bac à Sable"}</span>
+              </button>
+            </div>
+
+            {/* Maintenance Mode Config */}
+            <div className="mt-8 pt-6 border-t border-slate-800 space-y-4">
+              <h4 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <AlertTriangle size={16} className="text-amber-500 animate-pulse" />
+                  <span>Mode Maintenance (Application Indisponible)</span>
+                </div>
+                <span className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full ${
+                  maintenanceModeEnabled 
+                    ? "bg-amber-950 text-amber-400 border border-amber-800 animate-pulse" 
+                    : "bg-slate-900 text-slate-500 border border-slate-800"
+                }`}>
+                  {maintenanceModeEnabled ? "MAINTENANCE ACTIF" : "PUBLIC"}
+                </span>
+              </h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Activez ce mode pour rendre l'application indisponible. Les élèves et enseignants verront un écran de mise à jour sécurisé.
+                <br /><br />
+                <strong className="text-amber-400">Pourquoi l'activer ?</strong> Cela vous permet d'effectuer des modifications et de synchroniser des données avec l'intelligence artificielle en toute tranquillité, sans risque de perturbation par des connexions d'élèves. Seul le code administrateur permet d'outrepasser cet écran.
+              </p>
+
+              <button
+                type="button"
+                id="toggle-maintenance-mode-btn"
+                onClick={() => {
+                  const confirm = window.confirm(
+                    maintenanceModeEnabled 
+                      ? "Voulez-vous désactiver la maintenance ? L'application redeviendra instantanément disponible et accessible au public."
+                      : "Voulez-vous ACTIVER la maintenance ? L'application deviendra inaccessible pour tous les élèves et enseignants."
+                  );
+                  if (confirm) {
+                    onUpdateMaintenanceMode(!maintenanceModeEnabled);
+                  }
+                }}
+                className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition border ${
+                  maintenanceModeEnabled
+                    ? "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border-emerald-600/30"
+                    : "bg-amber-600/10 hover:bg-amber-600/20 text-amber-400 border-amber-600/30"
+                }`}
+              >
+                {maintenanceModeEnabled ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                <span>{maintenanceModeEnabled ? "Rendre l'application Disponible (Fin Maintenance)" : "Rendre l'application Indisponible (Maintenance)"}</span>
               </button>
             </div>
 

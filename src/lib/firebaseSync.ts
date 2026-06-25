@@ -147,6 +147,7 @@ export async function resetFirestore(): Promise<void> {
 export interface GlobalSettings {
   superAdminCode: string;
   sandboxModeEnabled: boolean;
+  maintenanceModeEnabled?: boolean;
 }
 
 export async function saveSettingsToFirestore(settings: GlobalSettings): Promise<void> {
@@ -160,7 +161,8 @@ export async function loadSettingsFromFirestore(): Promise<GlobalSettings> {
       const data = snap.data();
       return {
         superAdminCode: data.superAdminCode || "admin1234",
-        sandboxModeEnabled: data.sandboxModeEnabled !== undefined ? data.sandboxModeEnabled : false
+        sandboxModeEnabled: data.sandboxModeEnabled !== undefined ? data.sandboxModeEnabled : false,
+        maintenanceModeEnabled: data.maintenanceModeEnabled !== undefined ? data.maintenanceModeEnabled : false
       };
     }
   } catch (error) {
@@ -168,6 +170,7 @@ export async function loadSettingsFromFirestore(): Promise<GlobalSettings> {
   }
   return {
     superAdminCode: "admin1234",
-    sandboxModeEnabled: false
+    sandboxModeEnabled: false,
+    maintenanceModeEnabled: false
   };
 }
