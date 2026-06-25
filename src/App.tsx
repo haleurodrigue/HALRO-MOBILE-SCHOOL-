@@ -101,6 +101,7 @@ export default function App() {
       let firebaseLoaded = false;
       let loadedPayoutRequests: PayoutRequest[] = [];
       let loadedInvoices: Invoice[] = [];
+      let loadedStudentCodes: StudentCode[] = [];
       
       const isConnected = await testFirestoreConnection();
       if (isConnected) {
@@ -111,8 +112,8 @@ export default function App() {
           setClasses(dbData.classes);
           setCourses(dbData.courses);
           setTeachers(dbData.teachers);
-          setStudentCodes(dbData.studentCodes);
           
+          loadedStudentCodes = dbData.studentCodes;
           loadedPayoutRequests = dbData.payoutRequests;
           loadedInvoices = dbData.invoices;
           
@@ -189,10 +190,10 @@ export default function App() {
         }
 
         try {
-          if (storedCodes) setStudentCodes(JSON.parse(storedCodes));
-          else setStudentCodes(initialStudentCodes);
+          if (storedCodes) loadedStudentCodes = JSON.parse(storedCodes);
+          else loadedStudentCodes = [...initialStudentCodes];
         } catch (e) {
-          setStudentCodes(initialStudentCodes);
+          loadedStudentCodes = [...initialStudentCodes];
         }
 
         try {
@@ -246,10 +247,67 @@ export default function App() {
         console.error("Error during auto-cleanup of old payment history:", err);
       }
 
+      // Automatic Expiry Update & Purge for Expired Student Codes
+      try {
+        const nowMs = Date.now();
+        const tempExpiryThresholdMs = nowMs - 7 * 24 * 60 * 60 * 1000; // 7 days ago
+        const definitiveExpiryThresholdMs = nowMs - 180 * 24 * 60 * 60 * 1000; // 180 days ago
+
+        const updatedCodes: StudentCode[] = [];
+        const expiredAndDeletedIds: string[] = [];
+        const expiredButUpdatedCodes: StudentCode[] = [];
+
+        for (const code of loadedStudentCodes) {
+          const expiresMs = new Date(code.expiresAt).getTime();
+          const isExpired = expiresMs < nowMs;
+
+          // 1. Permanent deletion threshold check
+          if (isExpired) {
+            if (code.type === "temporary" && expiresMs < tempExpiryThresholdMs) {
+              expiredAndDeletedIds.push(code.id);
+              continue; // Skip, do not add to updatedCodes (deleted)
+            }
+            if (code.type === "definitive" && expiresMs < definitiveExpiryThresholdMs) {
+              expiredAndDeletedIds.push(code.id);
+              continue; // Skip, do not add to updatedCodes (deleted)
+            }
+          }
+
+          // 2. Status update check
+          if (isExpired && code.status === "active") {
+            const updatedCode: StudentCode = { ...code, status: "expired" as const };
+            updatedCodes.push(updatedCode);
+            expiredButUpdatedCodes.push(updatedCode);
+          } else {
+            updatedCodes.push(code);
+          }
+        }
+
+        if (expiredAndDeletedIds.length > 0 || expiredButUpdatedCodes.length > 0) {
+          console.log(`[Auto-Cleanup] Deleting ${expiredAndDeletedIds.length} very old expired student codes, and updating status to "expired" for ${expiredButUpdatedCodes.length} student codes.`);
+          loadedStudentCodes = updatedCodes;
+
+          if (firebaseLoaded) {
+            // Delete very old codes from Firestore
+            for (const id of expiredAndDeletedIds) {
+              await deleteStudentCodeFromFirestore(id).catch(err => console.error("Firestore sync failed for deleting expired student code:", err));
+            }
+            // Update status of recently expired codes in Firestore
+            for (const code of expiredButUpdatedCodes) {
+              await saveStudentCodeToFirestore(code).catch(err => console.error("Firestore sync failed for updating expired student code status:", err));
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error during auto-cleanup of student codes:", err);
+      }
+
       setPayoutRequests(loadedPayoutRequests);
       setInvoices(loadedInvoices);
+      setStudentCodes(loadedStudentCodes);
       localStorage.setItem("halro_payout_requests", JSON.stringify(loadedPayoutRequests));
       localStorage.setItem("halro_invoices", JSON.stringify(loadedInvoices));
+      localStorage.setItem("halro_student_codes", JSON.stringify(loadedStudentCodes));
 
       // Rest of simple settings that don't live in Firestore collections
       const storedAdminCode = localStorage.getItem("halro_admin_code");
