@@ -14,9 +14,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with the specific custom database ID provided
-export const db = initializeFirestore(app, {
-  databaseId: "ai-studio-44212a93-26af-4740-8544-74438a13810c"
-});
+export const db = initializeFirestore(app, {}, "ai-studio-44212a93-26af-4740-8544-74438a13810c");
 
 // Validate Connection to Firestore on startup
 export async function testFirestoreConnection(): Promise<boolean> {
