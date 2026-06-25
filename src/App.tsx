@@ -18,6 +18,17 @@ import StudentMobileApp from "./components/StudentMobileApp";
 import TeacherPortal from "./components/TeacherPortal";
 import AdminPortal from "./components/AdminPortal";
 import { saveCoursesToIndexedDB, loadCoursesFromIndexedDB } from "./lib/indexedDbHelper";
+import { testFirestoreConnection } from "./lib/firebase";
+import { 
+  loadAllDataFromFirestore, 
+  saveClassToFirestore, 
+  saveCourseToFirestore, 
+  saveTeacherToFirestore, 
+  saveStudentCodeToFirestore, 
+  savePayoutRequestToFirestore, 
+  saveInvoiceToFirestore,
+  resetFirestore
+} from "./lib/firebaseSync";
 
 export default function App() {
   // Application Roles Tabs: 'student' | 'teacher' | 'admin'
@@ -56,103 +67,137 @@ export default function App() {
   // If locked, the sandbox switcher is hidden and the app runs purely as that single role.
   const [productionLock, setProductionLock] = useState<"none" | "student" | "teacher" | "admin">("none");
 
-  // Initialize from LocalStorage or seed data
+  // Initialize from Firestore or LocalStorage/IndexedDB fallback
   useEffect(() => {
-    // One-time automatic clean-up of old simulated demo data to make it a fully pristine, ready production version
-    const appVersion = localStorage.getItem("halro_app_version");
-    if (appVersion !== "v2") {
-      localStorage.removeItem("halro_classes");
-      localStorage.removeItem("halro_courses");
-      localStorage.removeItem("halro_teachers");
-      localStorage.removeItem("halro_student_codes");
-      localStorage.removeItem("halro_payout_requests");
-      localStorage.removeItem("halro_invoices");
-      localStorage.setItem("halro_app_version", "v2");
+    const loadDataWithFallback = async () => {
+      let firebaseLoaded = false;
       
-      setClasses(initialClasses);
-      setCourses(initialCourses);
-      setTeachers(initialTeachers);
-      setStudentCodes(initialStudentCodes);
-      setPayoutRequests([]);
-      setInvoices([]);
-      setIsLoaded(true);
-      return;
-    }
-
-    const storedClasses = localStorage.getItem("halro_classes");
-    const storedTeachers = localStorage.getItem("halro_teachers");
-    const storedCodes = localStorage.getItem("halro_student_codes");
-    const storedPayouts = localStorage.getItem("halro_payout_requests");
-    const storedInvoices = localStorage.getItem("halro_invoices");
-    const storedAdminCode = localStorage.getItem("halro_admin_code");
-    const storedLock = localStorage.getItem("halro_production_lock");
-
-    try {
-      if (storedClasses) setClasses(JSON.parse(storedClasses));
-      else setClasses(initialClasses);
-    } catch (e) {
-      console.error("Failed to parse classes", e);
-      setClasses(initialClasses);
-    }
-
-    try {
-      if (storedTeachers) setTeachers(JSON.parse(storedTeachers));
-      else setTeachers(initialTeachers);
-    } catch (e) {
-      console.error("Failed to parse teachers", e);
-      setTeachers(initialTeachers);
-    }
-
-    try {
-      if (storedCodes) setStudentCodes(JSON.parse(storedCodes));
-      else setStudentCodes(initialStudentCodes);
-    } catch (e) {
-      console.error("Failed to parse student codes", e);
-      setStudentCodes(initialStudentCodes);
-    }
-
-    try {
-      if (storedPayouts) setPayoutRequests(JSON.parse(storedPayouts));
-      else setPayoutRequests([]);
-    } catch (e) {
-      console.error("Failed to parse payout requests", e);
-      setPayoutRequests([]);
-    }
-
-    try {
-      if (storedInvoices) setInvoices(JSON.parse(storedInvoices));
-      else setInvoices([]);
-    } catch (e) {
-      console.error("Failed to parse invoices", e);
-      setInvoices([]);
-    }
-
-    if (storedAdminCode) setSuperAdminCode(storedAdminCode);
-    else setSuperAdminCode("admin1234");
-
-    if (storedLock) {
-      setProductionLock(storedLock as any);
-      if (storedLock !== "none") {
-        setActiveRole(storedLock as any);
-        setActivePortal(storedLock as any);
-        setShowSandboxControls(false);
+      const isConnected = await testFirestoreConnection();
+      if (isConnected) {
+        try {
+          console.log("Loading all data from Firestore...");
+          const dbData = await loadAllDataFromFirestore();
+          
+          setClasses(dbData.classes);
+          setCourses(dbData.courses);
+          setTeachers(dbData.teachers);
+          setStudentCodes(dbData.studentCodes);
+          setPayoutRequests(dbData.payoutRequests);
+          setInvoices(dbData.invoices);
+          
+          // Back-save to localStorage/IndexedDB for next offline boot
+          localStorage.setItem("halro_classes", JSON.stringify(dbData.classes));
+          saveCoursesToIndexedDB(dbData.courses);
+          localStorage.setItem("halro_teachers", JSON.stringify(dbData.teachers));
+          localStorage.setItem("halro_student_codes", JSON.stringify(dbData.studentCodes));
+          localStorage.setItem("halro_payout_requests", JSON.stringify(dbData.payoutRequests));
+          localStorage.setItem("halro_invoices", JSON.stringify(dbData.invoices));
+          
+          firebaseLoaded = true;
+          console.log("✓ All data loaded successfully from cloud Firestore.");
+        } catch (e) {
+          console.error("Failed to load from Firestore, falling back to LocalStorage:", e);
+        }
       }
-    }
 
-    // Load courses asynchronously from IndexedDB to bypass 5MB localStorage limits for heavy books
-    loadCoursesFromIndexedDB().then((dbCourses) => {
-      if (dbCourses && dbCourses.length > 0) {
-        setCourses(dbCourses);
-      } else {
-        setCourses(initialCourses);
-        saveCoursesToIndexedDB(initialCourses);
+      if (!firebaseLoaded) {
+        console.log("Using LocalStorage/IndexedDB fallback...");
+        // One-time automatic clean-up of old simulated demo data to make it a fully pristine, ready production version
+        const appVersion = localStorage.getItem("halro_app_version");
+        if (appVersion !== "v2") {
+          localStorage.removeItem("halro_classes");
+          localStorage.removeItem("halro_courses");
+          localStorage.removeItem("halro_teachers");
+          localStorage.removeItem("halro_student_codes");
+          localStorage.removeItem("halro_payout_requests");
+          localStorage.removeItem("halro_invoices");
+          localStorage.setItem("halro_app_version", "v2");
+          
+          setClasses(initialClasses);
+          setCourses(initialCourses);
+          setTeachers(initialTeachers);
+          setStudentCodes(initialStudentCodes);
+          setPayoutRequests([]);
+          setInvoices([]);
+          setIsLoaded(true);
+          return;
+        }
+
+        const storedClasses = localStorage.getItem("halro_classes");
+        const storedTeachers = localStorage.getItem("halro_teachers");
+        const storedCodes = localStorage.getItem("halro_student_codes");
+        const storedPayouts = localStorage.getItem("halro_payout_requests");
+        const storedInvoices = localStorage.getItem("halro_invoices");
+
+        try {
+          if (storedClasses) setClasses(JSON.parse(storedClasses));
+          else setClasses(initialClasses);
+        } catch (e) {
+          setClasses(initialClasses);
+        }
+
+        try {
+          if (storedTeachers) setTeachers(JSON.parse(storedTeachers));
+          else setTeachers(initialTeachers);
+        } catch (e) {
+          setTeachers(initialTeachers);
+        }
+
+        try {
+          if (storedCodes) setStudentCodes(JSON.parse(storedCodes));
+          else setStudentCodes(initialStudentCodes);
+        } catch (e) {
+          setStudentCodes(initialStudentCodes);
+        }
+
+        try {
+          if (storedPayouts) setPayoutRequests(JSON.parse(storedPayouts));
+          else setPayoutRequests([]);
+        } catch (e) {
+          setPayoutRequests([]);
+        }
+
+        try {
+          if (storedInvoices) setInvoices(JSON.parse(storedInvoices));
+          else setInvoices([]);
+        } catch (e) {
+          setInvoices([]);
+        }
+
+        // Load courses asynchronously from IndexedDB
+        try {
+          const dbCourses = await loadCoursesFromIndexedDB();
+          if (dbCourses && dbCourses.length > 0) {
+            setCourses(dbCourses);
+          } else {
+            setCourses(initialCourses);
+            saveCoursesToIndexedDB(initialCourses);
+          }
+        } catch (e) {
+          setCourses(initialCourses);
+        }
       }
+
+      // Rest of simple settings that don't live in Firestore collections
+      const storedAdminCode = localStorage.getItem("halro_admin_code");
+      const storedLock = localStorage.getItem("halro_production_lock");
+
+      if (storedAdminCode) setSuperAdminCode(storedAdminCode);
+      else setSuperAdminCode("admin1234");
+
+      if (storedLock) {
+        setProductionLock(storedLock as any);
+        if (storedLock !== "none") {
+          setActiveRole(storedLock as any);
+          setActivePortal(storedLock as any);
+          setShowSandboxControls(false);
+        }
+      }
+
       setIsLoaded(true);
-    }).catch((e) => {
-      console.error("IndexedDB courses load failed", e);
-      setCourses(initialCourses);
-      setIsLoaded(true);
-    });
+    };
+
+    loadDataWithFallback();
   }, []);
 
   useEffect(() => {
@@ -244,30 +289,48 @@ export default function App() {
   // Super Admin action: Add class
   const handleAddClass = (newCl: Class) => {
     setClasses(prev => [...prev, newCl]);
+    if (isOnline && !simulateOffline) {
+      saveClassToFirestore(newCl).catch(e => console.error("Firestore sync failed", e));
+    }
   };
 
   // Super Admin / Teacher action: Add Course
   const handleAddCourse = (newCourse: Course) => {
     setCourses(prev => [...prev, newCourse]);
+    if (isOnline && !simulateOffline) {
+      saveCourseToFirestore(newCourse).catch(e => console.error("Firestore sync failed", e));
+    }
   };
 
   const handleUpdateCourses = (updated: Course[]) => {
     setCourses(updated);
+    if (isOnline && !simulateOffline) {
+      updated.forEach(c => saveCourseToFirestore(c).catch(e => console.error("Firestore sync failed", e)));
+    }
   };
 
   // Super Admin action: Enroll Teacher
   const handleAddTeacher = (newTeach: Teacher) => {
     setTeachers(prev => [...prev, newTeach]);
+    if (isOnline && !simulateOffline) {
+      saveTeacherToFirestore(newTeach).catch(e => console.error("Firestore sync failed", e));
+    }
   };
 
   // Super Admin / Teacher action: update student codes
   const handleUpdateStudentCodes = (updated: StudentCode[]) => {
     setStudentCodes(updated);
+    if (isOnline && !simulateOffline) {
+      updated.forEach(c => saveStudentCodeToFirestore(c).catch(e => console.error("Firestore sync failed", e)));
+    }
   };
 
   // Teacher action: Request Payout
   const handleSendPayoutRequest = (req: PayoutRequest) => {
     setPayoutRequests(prev => [req, ...prev]);
+    if (isOnline && !simulateOffline) {
+      savePayoutRequestToFirestore(req).catch(e => console.error("Firestore sync failed", e));
+    }
   };
 
   // Super Admin action: Resolve Payout Request, reset balance & generate invoice
@@ -280,11 +343,31 @@ export default function App() {
 
     // 3. Reset teacher balance to 0 in active list
     setTeachers(prev => prev.map(t => t.matricule === invoice.teacherMatricule ? { ...t, balance: 0 } : t));
+
+    if (isOnline && !simulateOffline) {
+      // Find the request to update
+      const targetReq = payoutRequests.find(r => r.id === requestId);
+      if (targetReq) {
+        savePayoutRequestToFirestore({ ...targetReq, status: "paid" }).catch(e => console.error("Firestore sync failed", e));
+      }
+      
+      // Save Invoice
+      saveInvoiceToFirestore(invoice).catch(e => console.error("Firestore sync failed", e));
+      
+      // Reset teacher balance in Firestore
+      const targetTeacher = teachers.find(t => t.matricule === invoice.teacherMatricule);
+      if (targetTeacher) {
+        saveTeacherToFirestore({ ...targetTeacher, balance: 0 }).catch(e => console.error("Firestore sync failed", e));
+      }
+    }
   };
 
   // Super Admin action: Update teachers
   const handleUpdateTeachers = (updated: Teacher[]) => {
     setTeachers(updated);
+    if (isOnline && !simulateOffline) {
+      updated.forEach(t => saveTeacherToFirestore(t).catch(e => console.error("Firestore sync failed", e)));
+    }
   };
 
   // Super Admin action: Update Super Admin Code
@@ -298,9 +381,12 @@ export default function App() {
     if (commissionDetails) {
       console.log("Commissions distribuées :", commissionDetails);
     }
+    if (isOnline && !simulateOffline) {
+      saveStudentCodeToFirestore(newCode).catch(e => console.error("Firestore sync failed", e));
+    }
   };
 
-  const resetAllDataToDefault = () => {
+  const resetAllDataToDefault = async () => {
     const confirm = window.confirm("Voulez-vous réinitialiser toutes les données de l'application à leur état initial ? (Toutes vos modifications seront perdues)");
     if (!confirm) return;
 
@@ -312,6 +398,15 @@ export default function App() {
     localStorage.removeItem("halro_invoices");
     localStorage.removeItem("halro_admin_code");
     localStorage.setItem("halro_app_version", "v2");
+
+    if (isOnline && !simulateOffline) {
+      try {
+        await resetFirestore();
+        console.log("Firestore reset successfully.");
+      } catch (e) {
+        console.error("Failed to reset Firestore:", e);
+      }
+    }
 
     setClasses(initialClasses);
     setCourses(initialCourses);

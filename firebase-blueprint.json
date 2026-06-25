@@ -1,0 +1,129 @@
+{
+  "entities": {
+    "Class": {
+      "title": "Class",
+      "description": "Represents a class or level in Halro Mobile School",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "name", "description"]
+    },
+    "Course": {
+      "title": "Course",
+      "description": "Represents a secure course or book",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "classId": { "type": "string" },
+        "title": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "classId", "title", "authorId", "authorName", "content", "createdAt"]
+    },
+    "Teacher": {
+      "title": "Teacher",
+      "description": "Represents an ENS teacher in Halro Mobile School",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "surname": { "type": "string" },
+        "matricule": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "mobileMoney": { "type": "string" },
+        "defaultCommission": { "type": "integer" },
+        "balance": { "type": "number" },
+        "permissions": { "type": "object" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "surname", "matricule", "whatsapp", "mobileMoney", "defaultCommission", "balance", "permissions", "createdAt"]
+    },
+    "StudentCode": {
+      "title": "StudentCode",
+      "description": "Represents an access code for a student",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "matricule": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentPhone": { "type": "string" },
+        "type": { "type": "string" },
+        "classId": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "expiresAt": { "type": "string" },
+        "devicesUsed": { "type": "array" }
+      },
+      "required": ["id", "code", "matricule", "type", "status", "createdAt", "expiresAt", "devicesUsed"]
+    },
+    "PayoutRequest": {
+      "title": "PayoutRequest",
+      "description": "Represents a cashout/payout request made by a teacher",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "teacherSurname": { "type": "string" },
+        "teacherMatricule": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "mobileMoney": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "teacherId", "teacherName", "teacherSurname", "teacherMatricule", "whatsapp", "mobileMoney", "amount", "status", "createdAt"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Represents a paid invoice after a payout request is validated",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "payoutRequestId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "teacherSurname": { "type": "string" },
+        "teacherMatricule": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "mobileMoney": { "type": "string" },
+        "amount": { "type": "number" },
+        "paidAt": { "type": "string" },
+        "adminCode": { "type": "string" }
+      },
+      "required": ["id", "payoutRequestId", "teacherName", "teacherSurname", "teacherMatricule", "whatsapp", "mobileMoney", "amount", "paidAt", "adminCode"]
+    }
+  },
+  "firestore": {
+    "/classes/{classId}": {
+      "schema": "Class",
+      "description": "Level or Class"
+    },
+    "/courses/{courseId}": {
+      "schema": "Course",
+      "description": "Secure digital books and courses"
+    },
+    "/teachers/{teacherId}": {
+      "schema": "Teacher",
+      "description": "ENS Teachers"
+    },
+    "/studentCodes/{codeId}": {
+      "schema": "StudentCode",
+      "description": "Access codes for student authorization"
+    },
+    "/payoutRequests/{requestId}": {
+      "schema": "PayoutRequest",
+      "description": "Requests for commissions cashout"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Paid payout history records"
+    }
+  }
+}
