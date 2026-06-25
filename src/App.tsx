@@ -34,7 +34,8 @@ import {
   deleteInvoiceFromFirestore,
   resetFirestore,
   loadSettingsFromFirestore,
-  saveSettingsToFirestore
+  saveSettingsToFirestore,
+  subscribeToGlobalSettings
 } from "./lib/firebaseSync";
 
 export default function App() {
@@ -50,11 +51,15 @@ export default function App() {
   // Sandbox Mode: when false, rapid switchers and offline simulation are hidden for security on other devices
   const [sandboxModeEnabled, setSandboxModeEnabled] = useState<boolean>(false);
 
+  // Main global admin password state
+  const [superAdminCode, setSuperAdminCode] = useState("admin1234");
+
   // Maintenance Mode: when true, a professional maintenance screen block is displayed for all non-admin users
   const [maintenanceModeEnabled, setMaintenanceModeEnabled] = useState<boolean>(false);
-  const [isMaintenanceBypassed, setIsMaintenanceBypassed] = useState<boolean>(() => {
-    return localStorage.getItem("halro_bypass_maintenance") === "true";
+  const [maintenanceBypassCode, setMaintenanceBypassCode] = useState<string>(() => {
+    return localStorage.getItem("halro_bypass_maintenance_code") || "";
   });
+  const isMaintenanceBypassed = maintenanceBypassCode === superAdminCode;
   const [maintenanceCodeInput, setMaintenanceCodeInput] = useState("");
   const [maintenanceError, setMaintenanceError] = useState("");
 
@@ -65,7 +70,6 @@ export default function App() {
   const [studentCodes, setStudentCodes] = useState<StudentCode[]>([]);
   const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [superAdminCode, setSuperAdminCode] = useState("admin1234");
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Simulated Device State
@@ -291,6 +295,22 @@ export default function App() {
     loadDataWithFallback();
   }, []);
 
+  // Live listener to synchronize global settings across all devices in real-time
+  useEffect(() => {
+    if (isOnline && !simulateOffline) {
+      const unsubscribe = subscribeToGlobalSettings((settings) => {
+        setSuperAdminCode(settings.superAdminCode);
+        setSandboxModeEnabled(settings.sandboxModeEnabled);
+        setMaintenanceModeEnabled(!!settings.maintenanceModeEnabled);
+        
+        localStorage.setItem("halro_admin_code", settings.superAdminCode);
+        localStorage.setItem("halro_sandbox_mode_enabled", JSON.stringify(settings.sandboxModeEnabled));
+        localStorage.setItem("halro_maintenance_mode_enabled", JSON.stringify(!!settings.maintenanceModeEnabled));
+      });
+      return () => unsubscribe();
+    }
+  }, [isOnline, simulateOffline]);
+
   useEffect(() => {
     localStorage.setItem("halro_production_lock", productionLock);
     if (productionLock !== "none") {
@@ -485,6 +505,8 @@ export default function App() {
   // Super Admin action: Update Super Admin Code
   const handleUpdateSuperAdminCode = (newCode: string) => {
     setSuperAdminCode(newCode);
+    setMaintenanceBypassCode(newCode);
+    localStorage.setItem("halro_bypass_maintenance_code", newCode);
     if (isOnline && !simulateOffline) {
       saveSettingsToFirestore({ superAdminCode: newCode, sandboxModeEnabled, maintenanceModeEnabled }).catch(e => console.error("Firestore sync failed for settings", e));
     }
@@ -504,8 +526,8 @@ export default function App() {
     setMaintenanceModeEnabled(enabled);
     localStorage.setItem("halro_maintenance_mode_enabled", JSON.stringify(enabled));
     if (enabled) {
-      setIsMaintenanceBypassed(true);
-      localStorage.setItem("halro_bypass_maintenance", "true");
+      setMaintenanceBypassCode(superAdminCode);
+      localStorage.setItem("halro_bypass_maintenance_code", superAdminCode);
     }
     if (isOnline && !simulateOffline) {
       saveSettingsToFirestore({ superAdminCode, sandboxModeEnabled, maintenanceModeEnabled: enabled }).catch(e => console.error("Firestore sync failed for settings", e));
@@ -760,8 +782,8 @@ export default function App() {
                   onSubmit={(e) => {
                     e.preventDefault();
                     if (maintenanceCodeInput === superAdminCode) {
-                      setIsMaintenanceBypassed(true);
-                      localStorage.setItem("halro_bypass_maintenance", "true");
+                      setMaintenanceBypassCode(superAdminCode);
+                      localStorage.setItem("halro_bypass_maintenance_code", superAdminCode);
                       setMaintenanceError("");
                     } else {
                       setMaintenanceError("Code administrateur incorrect.");

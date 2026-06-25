@@ -159,7 +159,23 @@ export default function AdminPortal({
 }: AdminPortalProps) {
   const [password, setPassword] = useState("");
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [enteredCode, setEnteredCode] = useState(() => {
+    return localStorage.getItem("halro_entered_admin_code") || "";
+  });
   const [loginError, setLoginError] = useState("");
+
+  // Auto de-authorize if the super admin code changes remotely and no longer matches
+  useEffect(() => {
+    if (isAuthorized) {
+      if (!enteredCode || enteredCode !== superAdminCode) {
+        setIsAuthorized(false);
+        setEnteredCode("");
+        setPassword("");
+        localStorage.removeItem("halro_entered_admin_code");
+        alert("Le code administrateur principal a été modifié depuis un autre appareil. Vous avez été déconnecté pour votre sécurité.");
+      }
+    }
+  }, [superAdminCode, isAuthorized, enteredCode]);
 
   // Tabs: 'dashboard' | 'classes' | 'teachers' | 'courses' | 'student-codes' | 'payouts' | 'settings'
   const [activeTab, setActiveTab] = useState<"dashboard" | "classes" | "teachers" | "courses" | "student-codes" | "payouts" | "settings">("dashboard");
@@ -261,8 +277,11 @@ export default function AdminPortal({
     e.preventDefault();
     setLoginError("");
 
-    if (password.trim() === superAdminCode) {
+    const trimmedPassword = password.trim();
+    if (trimmedPassword === superAdminCode) {
       setIsAuthorized(true);
+      setEnteredCode(trimmedPassword);
+      localStorage.setItem("halro_entered_admin_code", trimmedPassword);
       localStorage.setItem("halro_bypass_maintenance", "true");
     } else {
       setLoginError("Code d'accès incorrect. Veuillez réessayer.");
@@ -271,8 +290,10 @@ export default function AdminPortal({
 
   const handleLogout = () => {
     setIsAuthorized(false);
+    setEnteredCode("");
     setPassword("");
     setViewedCourse(null);
+    localStorage.removeItem("halro_entered_admin_code");
     localStorage.removeItem("halro_bypass_maintenance");
   };
 
@@ -285,7 +306,7 @@ export default function AdminPortal({
           </div>
           <h3 className="text-lg font-bold">Administration Principale</h3>
           <p className="text-xs text-slate-400 mt-1">
-            Entrez votre code d'accès administrateur principal (Code par défaut: <code className="text-red-400 bg-red-950/40 px-1 py-0.5 rounded">admin1234</code>)
+            Veuillez saisir votre code d'accès administrateur principal pour accéder au panneau de contrôle.
           </p>
         </div>
 
@@ -653,7 +674,10 @@ export default function AdminPortal({
       return;
     }
 
-    onUpdateSuperAdminCode(newAdminCode.trim());
+    const trimmedCode = newAdminCode.trim();
+    onUpdateSuperAdminCode(trimmedCode);
+    setEnteredCode(trimmedCode);
+    localStorage.setItem("halro_entered_admin_code", trimmedCode);
     setAdminCodeSuccess("Code administrateur modifié avec succès ! Pensez à l'utiliser lors de votre prochaine connexion.");
     setNewAdminCode("");
     setTimeout(() => setAdminCodeSuccess(""), 5000);

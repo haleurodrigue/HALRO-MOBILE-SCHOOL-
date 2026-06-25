@@ -1,6 +1,6 @@
 import { db } from "./firebase";
 import { 
-  collection, doc, getDocs, setDoc, deleteDoc, writeBatch, getDoc 
+  collection, doc, getDocs, setDoc, deleteDoc, writeBatch, getDoc, onSnapshot 
 } from "firebase/firestore";
 import { 
   Class, Course, Teacher, StudentCode, PayoutRequest, Invoice 
@@ -174,3 +174,22 @@ export async function loadSettingsFromFirestore(): Promise<GlobalSettings> {
     maintenanceModeEnabled: false
   };
 }
+
+export function subscribeToGlobalSettings(
+  onUpdate: (settings: GlobalSettings) => void
+): () => void {
+  const docRef = doc(db, "settings", "global");
+  return onSnapshot(docRef, (snap) => {
+    if (snap.exists()) {
+      const data = snap.data();
+      onUpdate({
+        superAdminCode: data.superAdminCode || "admin1234",
+        sandboxModeEnabled: data.sandboxModeEnabled !== undefined ? data.sandboxModeEnabled : false,
+        maintenanceModeEnabled: data.maintenanceModeEnabled !== undefined ? data.maintenanceModeEnabled : false
+      });
+    }
+  }, (error) => {
+    console.error("Error listening to global settings:", error);
+  });
+}
+
