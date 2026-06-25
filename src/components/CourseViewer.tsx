@@ -620,16 +620,17 @@ export default function CourseViewer({
               <p className="text-[10px] text-slate-400 mt-1">Cliquez sur le bouton de zoom avant (+) pour afficher le document.</p>
             </div>
           ) : (
-            <div 
-              id="pdf-page-canvas" 
-              className="relative select-none border border-slate-200 bg-white text-slate-800 rounded-xl shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden shrink-0 mx-auto"
-              style={{ 
-                width: `${680 * (zoomLevel / 100)}px`, 
-                minHeight: "100%",
-                WebkitUserSelect: "none", 
-                userSelect: "none" 
-              }}
-            >
+            <div className="min-w-full flex justify-center items-start shrink-0 py-2">
+              <div 
+                id="pdf-page-canvas" 
+                className="relative select-none border border-slate-200 bg-white text-slate-800 rounded-xl shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden shrink-0"
+                style={{ 
+                  width: `${680 * (zoomLevel / 100)}px`, 
+                  minHeight: "100%",
+                  WebkitUserSelect: "none", 
+                  userSelect: "none" 
+                }}
+              >
               {/* CONTINUOUS SVG WATERMARK OVERLAY (Only if student) */}
               {!isSuperAdmin && (
                 <div 
@@ -759,6 +760,7 @@ export default function CourseViewer({
               )}
 
             </div>
+          </div>
           )}
         </div>
 

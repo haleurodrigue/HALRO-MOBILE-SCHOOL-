@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   PlusCircle, Users, BookOpen, Key, DollarSign, Settings, Bell, CheckCircle, 
-  Trash2, ShieldCheck, FileText, Download, ShieldAlert, Lock, ToggleLeft, ToggleRight, ArrowRight, Clipboard
+  Trash2, ShieldCheck, FileText, Download, ShieldAlert, Lock, ToggleLeft, ToggleRight, ArrowRight, Clipboard, RefreshCw
 } from "lucide-react";
 import { Class, Course, Teacher, StudentCode, PayoutRequest, Invoice, AccessCodeType } from "../types";
 import { jsPDF } from "jspdf";
@@ -125,6 +125,8 @@ interface AdminPortalProps {
   onUpdateProductionLock: (lock: "none" | "student" | "teacher" | "admin") => void;
   onAddCourse: (newCourse: Course) => void;
   onUpdateCourses: (updated: Course[]) => void;
+  sandboxModeEnabled: boolean;
+  onUpdateSandboxMode: (enabled: boolean) => void;
 }
 
 export default function AdminPortal({
@@ -147,7 +149,9 @@ export default function AdminPortal({
   onUpdateSuperAdminCode,
   onUpdateProductionLock,
   onAddCourse,
-  onUpdateCourses
+  onUpdateCourses,
+  sandboxModeEnabled,
+  onUpdateSandboxMode
 }: AdminPortalProps) {
   const [password, setPassword] = useState("");
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -1800,6 +1804,51 @@ export default function AdminPortal({
                 Sauvegarder le nouveau code
               </button>
             </form>
+
+            {/* Sandbox Mode Config */}
+            <div className="mt-8 pt-6 border-t border-slate-800 space-y-4">
+              <h4 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <RefreshCw size={16} className="text-emerald-500" />
+                  <span>Mode Bac à Sable (Sélecteur rapide)</span>
+                </div>
+                <span className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full ${
+                  sandboxModeEnabled 
+                    ? "bg-emerald-950 text-emerald-400 border border-emerald-800" 
+                    : "bg-red-950 text-red-400 border border-red-800"
+                }`}>
+                  {sandboxModeEnabled ? "ACTIVE" : "DÉSACTIVÉ"}
+                </span>
+              </h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Le mode Bac à sable affiche un sélecteur de rôles rapide de simulation pour tester l'application d'un simple clic. 
+                <br /><br />
+                <strong className="text-amber-400">Pour un usage professionnel sérieux :</strong> Désactivez ce mode. La barre de simulation sera masquée pour tous les utilisateurs sur tous les appareils, et l'accès ne sera possible que via les codes d'accès sécurisés sur la page d'accueil.
+              </p>
+
+              <button
+                type="button"
+                id="toggle-sandbox-mode-btn"
+                onClick={() => {
+                  const confirm = window.confirm(
+                    sandboxModeEnabled 
+                      ? "Voulez-vous DÉSACTIVER le mode Bac à sable ? La barre de simulation rapide sera masquée sur tous les téléphones/ordinateurs des utilisateurs."
+                      : "Voulez-vous ACTIVER le mode Bac à sable ?"
+                  );
+                  if (confirm) {
+                    onUpdateSandboxMode(!sandboxModeEnabled);
+                  }
+                }}
+                className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition border ${
+                  sandboxModeEnabled
+                    ? "bg-red-650/10 hover:bg-red-650/20 text-red-400 border-red-650/30"
+                    : "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border-emerald-600/30"
+                }`}
+              >
+                {sandboxModeEnabled ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                <span>{sandboxModeEnabled ? "Désactiver le Mode Bac à Sable" : "Activer le Mode Bac à Sable"}</span>
+              </button>
+            </div>
 
             {/* Production Lock Config */}
             <div className="mt-8 pt-6 border-t border-slate-800 space-y-4">

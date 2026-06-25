@@ -1,6 +1,6 @@
 import { db } from "./firebase";
 import { 
-  collection, doc, getDocs, setDoc, deleteDoc, writeBatch 
+  collection, doc, getDocs, setDoc, deleteDoc, writeBatch, getDoc 
 } from "firebase/firestore";
 import { 
   Class, Course, Teacher, StudentCode, PayoutRequest, Invoice 
@@ -142,4 +142,32 @@ export async function resetFirestore(): Promise<void> {
   for (const cls of initialClasses) {
     await setDoc(doc(db, "classes", cls.id), cls);
   }
+}
+
+export interface GlobalSettings {
+  superAdminCode: string;
+  sandboxModeEnabled: boolean;
+}
+
+export async function saveSettingsToFirestore(settings: GlobalSettings): Promise<void> {
+  await setDoc(doc(db, "settings", "global"), settings);
+}
+
+export async function loadSettingsFromFirestore(): Promise<GlobalSettings> {
+  try {
+    const snap = await getDoc(doc(db, "settings", "global"));
+    if (snap.exists()) {
+      const data = snap.data();
+      return {
+        superAdminCode: data.superAdminCode || "admin1234",
+        sandboxModeEnabled: data.sandboxModeEnabled !== undefined ? data.sandboxModeEnabled : false
+      };
+    }
+  } catch (error) {
+    console.error("Failed to load settings from Firestore, using defaults:", error);
+  }
+  return {
+    superAdminCode: "admin1234",
+    sandboxModeEnabled: false
+  };
 }

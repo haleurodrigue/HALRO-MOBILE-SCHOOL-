@@ -32,7 +32,9 @@ import {
   deletePayoutRequestFromFirestore,
   saveInvoiceToFirestore,
   deleteInvoiceFromFirestore,
-  resetFirestore
+  resetFirestore,
+  loadSettingsFromFirestore,
+  saveSettingsToFirestore
 } from "./lib/firebaseSync";
 
 export default function App() {
@@ -41,6 +43,12 @@ export default function App() {
 
   // Portal Landing Page vs Portal Views: 'portal' | 'student' | 'teacher' | 'admin'
   const [activePortal, setActivePortal] = useState<"portal" | "student" | "teacher" | "admin">("portal");
+
+  // Home Page Sub-tabs: 'student' | 'teacher' | 'admin'
+  const [activeHomeTab, setActiveHomeTab] = useState<"student" | "teacher" | "admin">("student");
+
+  // Sandbox Mode: when false, rapid switchers and offline simulation are hidden for security on other devices
+  const [sandboxModeEnabled, setSandboxModeEnabled] = useState<boolean>(false);
 
   // Main Persistent State
   const [classes, setClasses] = useState<Class[]>([]);
@@ -68,6 +76,9 @@ export default function App() {
   // Toggle for simulator/sandbox controls to see the pure production view
   const [showSandboxControls, setShowSandboxControls] = useState(true);
 
+  // Derived state: only show sandbox controls if enabled globally AND locally
+  const actualShowSandboxControls = sandboxModeEnabled && showSandboxControls;
+
   // Production Lock Mode: "none" | "student" | "teacher" | "admin"
   // If locked, the sandbox switcher is hidden and the app runs purely as that single role.
   const [productionLock, setProductionLock] = useState<"none" | "student" | "teacher" | "admin">("none");
@@ -92,6 +103,17 @@ export default function App() {
           
           loadedPayoutRequests = dbData.payoutRequests;
           loadedInvoices = dbData.invoices;
+          
+          // Fetch global settings from Firestore
+          try {
+            const settings = await loadSettingsFromFirestore();
+            setSuperAdminCode(settings.superAdminCode);
+            setSandboxModeEnabled(settings.sandboxModeEnabled);
+            localStorage.setItem("halro_admin_code", settings.superAdminCode);
+            localStorage.setItem("halro_sandbox_mode_enabled", JSON.stringify(settings.sandboxModeEnabled));
+          } catch (e) {
+            console.error("Failed to load settings from Firestore, using local:", e);
+          }
           
           // Back-save to localStorage/IndexedDB for next offline boot
           localStorage.setItem("halro_classes", JSON.stringify(dbData.classes));
@@ -218,9 +240,20 @@ export default function App() {
       // Rest of simple settings that don't live in Firestore collections
       const storedAdminCode = localStorage.getItem("halro_admin_code");
       const storedLock = localStorage.getItem("halro_production_lock");
+      const storedSandboxMode = localStorage.getItem("halro_sandbox_mode_enabled");
 
       if (storedAdminCode) setSuperAdminCode(storedAdminCode);
       else setSuperAdminCode("admin1234");
+
+      if (storedSandboxMode) {
+        try {
+          setSandboxModeEnabled(JSON.parse(storedSandboxMode));
+        } catch (e) {
+          setSandboxModeEnabled(false);
+        }
+      } else {
+        setSandboxModeEnabled(false);
+      }
 
       if (storedLock) {
         setProductionLock(storedLock as any);
@@ -431,6 +464,18 @@ export default function App() {
   // Super Admin action: Update Super Admin Code
   const handleUpdateSuperAdminCode = (newCode: string) => {
     setSuperAdminCode(newCode);
+    if (isOnline && !simulateOffline) {
+      saveSettingsToFirestore({ superAdminCode: newCode, sandboxModeEnabled }).catch(e => console.error("Firestore sync failed for settings", e));
+    }
+  };
+
+  // Super Admin action: Update Sandbox Mode
+  const handleUpdateSandboxMode = (enabled: boolean) => {
+    setSandboxModeEnabled(enabled);
+    localStorage.setItem("halro_sandbox_mode_enabled", JSON.stringify(enabled));
+    if (isOnline && !simulateOffline) {
+      saveSettingsToFirestore({ superAdminCode, sandboxModeEnabled: enabled }).catch(e => console.error("Firestore sync failed for settings", e));
+    }
   };
 
   // Super Admin / Teacher action: Generate code
@@ -480,7 +525,7 @@ export default function App() {
     <div id="app-root-container" className="min-h-screen bg-slate-950 font-sans text-slate-200">
       
       {/* Top Banner & Control Area */}
-      {showSandboxControls ? (
+      {actualShowSandboxControls ? (
         <header id="app-top-header" className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 px-4 py-3 md:px-6 md:py-4 shadow-md">
           <div className="max-w-7xl mx-auto flex flex-col gap-3">
             
@@ -611,7 +656,7 @@ export default function App() {
               </button>
             )}
 
-            {productionLock === "none" && (
+            {sandboxModeEnabled && productionLock === "none" && (
               <button
                 onClick={() => setShowSandboxControls(true)}
                 className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold underline"
@@ -627,7 +672,7 @@ export default function App() {
       <main id="app-main-workspace" className="max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8">
         
         {/* Helper sandbox alert banner */}
-        {showSandboxControls && activePortal !== "portal" && (
+        {actualShowSandboxControls && activePortal !== "portal" && (
           <div id="sandbox-guidance-banner" className="mb-4 p-3 bg-slate-900 border border-slate-800 rounded-xl flex flex-col gap-2 text-[11px] text-slate-400 leading-relaxed">
             <p className="font-bold text-slate-200 flex items-center gap-1">
               <Info size={14} className="text-indigo-400 shrink-0" />
@@ -644,121 +689,158 @@ export default function App() {
           
           {/* PORTAL LANDING SCREEN */}
           {activePortal === "portal" && (
-            <div id="portal-landing-page" className="max-w-4xl mx-auto py-4 space-y-10 animate-fade-in">
+            <div id="portal-landing-page" className="max-w-6xl mx-auto py-4 space-y-6 animate-fade-in">
               
               {/* High-end Brand Header */}
-              <div className="text-center space-y-4">
-                <div className="inline-flex items-center space-x-2 px-3 py-1 bg-indigo-950/60 text-indigo-400 rounded-full border border-indigo-900/30 text-xs font-semibold">
+              <div className="text-center space-y-3 mb-6">
+                <div className="inline-flex items-center space-x-2 px-3 py-1 bg-indigo-950/60 text-indigo-400 rounded-full border border-indigo-900/30 text-[11px] font-semibold">
                   <span>Enseignement à distance sécurisé de référence</span>
                 </div>
-                <h2 className="text-3xl md:text-5xl font-black tracking-tight text-white font-sans">
+                <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white font-sans">
                   HALRO MOBILE SCHOOL
                 </h2>
-                <p className="text-sm md:text-base text-slate-400 max-w-2xl mx-auto leading-relaxed">
-                  L'application professionnelle de partage et d'étude de supports de cours protégés. 
-                  Une technologie innovante interdisant les captures d'écran et téléchargements illicites pour préserver la propriété intellectuelle des enseignants.
+                <p className="text-xs md:text-sm text-slate-400 max-w-xl mx-auto leading-relaxed">
+                  L'application professionnelle de partage de supports de cours protégés. 
+                  Filigrane dynamique et blocage d'impression intégrés pour préserver la propriété intellectuelle.
                 </p>
               </div>
 
-              {/* Stats Panel */}
-              <div className="grid grid-cols-3 gap-3 md:gap-6 bg-slate-900/40 border border-slate-900 rounded-2xl p-4 md:p-6 text-center">
-                <div className="space-y-1">
-                  <span className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-wider block">Salles de classe</span>
-                  <span className="text-lg md:text-2xl font-black font-mono text-indigo-400">{classes.length}</span>
-                </div>
-                <div className="space-y-1 border-x border-slate-900">
-                  <span className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-wider block">Documents de Cours</span>
-                  <span className="text-lg md:text-2xl font-black font-mono text-emerald-400">{courses.length}</span>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-wider block">Enseignants Enrôlés</span>
-                  <span className="text-lg md:text-2xl font-black font-mono text-red-400">{teachers.length}</span>
-                </div>
+              {/* Three Tabs for Roles */}
+              <div className="flex justify-center bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 max-w-lg mx-auto mb-8 shadow-xl">
+                <button
+                  id="home-tab-student"
+                  onClick={() => setActiveHomeTab("student")}
+                  className={`flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl text-xs font-black tracking-wide uppercase transition-all duration-300 ${
+                    activeHomeTab === "student"
+                      ? "bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-lg"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-850/50"
+                  }`}
+                >
+                  <Smartphone size={14} />
+                  <span>🎓 Élève</span>
+                </button>
+                <button
+                  id="home-tab-teacher"
+                  onClick={() => setActiveHomeTab("teacher")}
+                  className={`flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl text-xs font-black tracking-wide uppercase transition-all duration-300 ${
+                    activeHomeTab === "teacher"
+                      ? "bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-lg"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-850/50"
+                  }`}
+                >
+                  <Users size={14} />
+                  <span>👨‍🏫 Enseignant</span>
+                </button>
+                <button
+                  id="home-tab-admin"
+                  onClick={() => setActiveHomeTab("admin")}
+                  className={`flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl text-xs font-black tracking-wide uppercase transition-all duration-300 ${
+                    activeHomeTab === "admin"
+                      ? "bg-gradient-to-tr from-red-650 to-pink-600 text-white shadow-lg"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-850/50"
+                  }`}
+                >
+                  <Shield size={14} />
+                  <span>🔑 Admin</span>
+                </button>
               </div>
 
-              {/* Portal Selector Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Tab Contents using hidden class for state preservation */}
+              <div className="mt-6">
                 
-                {/* 1. STUDENT CARD */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:border-emerald-500/30 transition duration-300 shadow-xl group">
-                  <div className="space-y-4">
-                    <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center group-hover:scale-105 transition">
-                      <Smartphone size={24} />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-slate-100">Espace Apprenant</h3>
-                      <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest font-bold block mt-1">Élève & Smartphone</span>
-                    </div>
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      Saisissez votre code d'accès sécurisé reçu de votre enseignant ou de la direction pour étudier vos cours hors-ligne.
-                    </p>
+                {/* 1. STUDENT TAB */}
+                <div className={activeHomeTab === "student" ? "animate-fade-in" : "hidden"}>
+                  <div className="max-w-sm mx-auto">
+                    <StudentMobileApp
+                      classes={classes}
+                      courses={courses}
+                      studentCodes={studentCodes}
+                      currentDeviceId={currentDeviceId}
+                      isOnline={isOnline && !simulateOffline}
+                      onUpdateCodes={handleUpdateStudentCodes}
+                      onDeleteCode={handleDeleteStudentCode}
+                      onBackToPortal={() => {}}
+                    />
                   </div>
-                  
-                  <button
-                    onClick={() => { setActiveRole("student"); setActivePortal("student"); }}
-                    className="w-full mt-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition duration-200"
-                  >
-                    Accéder à mes cours (Élève)
-                  </button>
                 </div>
 
-                {/* 2. TEACHER CARD */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:border-indigo-500/30 transition duration-300 shadow-xl group">
-                  <div className="space-y-4">
-                    <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-xl flex items-center justify-center group-hover:scale-105 transition">
-                      <Users size={24} />
+                {/* 2. TEACHER TAB */}
+                <div className={activeHomeTab === "teacher" ? "animate-fade-in" : "hidden"}>
+                  <div className="py-2 max-w-5xl mx-auto space-y-4">
+                    <div className="text-center md:text-left mb-6">
+                      <span className="text-[10px] font-extrabold tracking-widest text-indigo-400 bg-indigo-950/40 px-2.5 py-1 rounded-full border border-indigo-500/10 uppercase">
+                        Portail Enseignants
+                      </span>
+                      <h2 className="text-xl font-bold text-slate-100 mt-2">Espace Auteurs de cours & Commissions</h2>
+                      <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                        Publiez des documents protégés, gérez vos classes et suivez vos commissions en temps réel.
+                      </p>
                     </div>
-                    <div>
-                      <h3 className="text-base font-bold text-slate-100">Portail Enseignant</h3>
-                      <span className="text-[10px] font-mono text-indigo-400 uppercase tracking-widest font-bold block mt-1">Auteur de cours</span>
-                    </div>
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      Espace réservé aux collègues enseignants. Publiez des documents PDF, gérez les inscriptions et suivez vos gains de commissions.
-                    </p>
+                    <TeacherPortal
+                      teachers={teachers}
+                      classes={classes}
+                      courses={courses}
+                      studentCodes={studentCodes}
+                      payoutRequests={payoutRequests}
+                      onAddCourse={handleAddCourse}
+                      onGenerateCode={handleGenerateCode}
+                      onUpdateCodes={handleUpdateStudentCodes}
+                      onSendPayoutRequest={handleSendPayoutRequest}
+                      onDeleteTeacher={handleDeleteTeacher}
+                    />
                   </div>
-                  
-                  <button
-                    onClick={() => { setActiveRole("teacher"); setActivePortal("teacher"); }}
-                    className="w-full mt-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition duration-200"
-                  >
-                    Accéder à l'Espace Professeur
-                  </button>
                 </div>
 
-                {/* 3. ADMIN CARD */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:border-red-500/30 transition duration-300 shadow-xl group">
-                  <div className="space-y-4">
-                    <div className="w-12 h-12 bg-red-500/10 text-red-400 rounded-xl flex items-center justify-center group-hover:scale-105 transition">
-                      <Shield size={24} />
+                {/* 3. ADMIN TAB */}
+                <div className={activeHomeTab === "admin" ? "animate-fade-in" : "hidden"}>
+                  <div className="py-2 max-w-6xl mx-auto space-y-4">
+                    <div className="text-center md:text-left mb-6">
+                      <span className="text-[10px] font-extrabold tracking-widest text-red-400 bg-red-950/40 px-2.5 py-1 rounded-full border border-red-500/10 uppercase">
+                        Super Administration
+                      </span>
+                      <h2 className="text-xl font-bold text-slate-100 mt-2">Panneau de Contrôle de la Direction</h2>
+                      <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                        Créez des classes, enrôlez des professeurs auteurs de cours et administrez le système de commissions.
+                      </p>
                     </div>
-                    <div>
-                      <h3 className="text-base font-bold text-slate-100">Direction Générale</h3>
-                      <span className="text-[10px] font-mono text-red-400 uppercase tracking-widest font-bold block mt-1">Super Administration</span>
-                    </div>
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      Configuration du système, attribution des licences d'un an, validation des demandes de retraits de commissions enseignants.
-                    </p>
+                    <AdminPortal
+                      classes={classes}
+                      courses={courses}
+                      teachers={teachers}
+                      studentCodes={studentCodes}
+                      payoutRequests={payoutRequests}
+                      invoices={invoices}
+                      superAdminCode={superAdminCode}
+                      productionLock={productionLock}
+                      onAddClass={handleAddClass}
+                      onDeleteClass={handleDeleteClass}
+                      onAddTeacher={handleAddTeacher}
+                      onDeleteTeacher={handleDeleteTeacher}
+                      onUpdateTeachers={handleUpdateTeachers}
+                      onGenerateCode={handleGenerateCode}
+                      onUpdateCodes={handleUpdateStudentCodes}
+                      onResolvePayout={handleResolvePayout}
+                      onUpdateSuperAdminCode={handleUpdateSuperAdminCode}
+                      onUpdateProductionLock={setProductionLock}
+                      onAddCourse={handleAddCourse}
+                      onUpdateCourses={handleUpdateCourses}
+                      sandboxModeEnabled={sandboxModeEnabled}
+                      onUpdateSandboxMode={handleUpdateSandboxMode}
+                    />
                   </div>
-                  
-                  <button
-                    onClick={() => { setActiveRole("admin"); setActivePortal("admin"); }}
-                    className="w-full mt-6 py-2.5 bg-red-650 hover:bg-red-600 text-white font-bold rounded-xl text-xs transition duration-200"
-                  >
-                    Se connecter à la Direction
-                  </button>
                 </div>
 
               </div>
 
               {/* Secure explanation banner */}
-              <div className="p-5 bg-slate-900/60 border border-slate-900 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-400">
+              <div className="p-5 bg-slate-900/40 border border-slate-900 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-400 mt-10">
                 <div className="space-y-1.5">
                   <h4 className="font-bold text-slate-200 flex items-center space-x-1.5">
                     <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
                     <span>Système de Protection Active</span>
                   </h4>
                   <p className="leading-relaxed">
-                    Les cours ne sont jamais téléchargés localement en tant que fichiers PDF bruts. Ils sont lus dans notre visionneuse sécurisée avec filigrane dynamique personnalisé contenant le matricule et le code de l'élève.
+                    Les cours ne sont jamais téléchargeables en PDF brut. La lecture s'effectue au travers de notre visionneuse avec filigrane indélébile contenant le matricule de l'apprenant.
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -767,13 +849,13 @@ export default function App() {
                     <span>Juste Rémunération Enseignante</span>
                   </h4>
                   <p className="leading-relaxed">
-                    L'attribution d'un code définitif à un élève pour une classe donnée génère immédiatement une commission automatique créditée sur le solde de tous les enseignants auteurs publiés dans cette classe.
+                    L'enregistrement d'un code élève définitif crédite automatiquement la commission due aux enseignants auteurs de la classe correspondante.
                   </p>
                 </div>
               </div>
 
               {/* Contacter l'administrateur section */}
-              <div id="contact-admin-section" className="p-5 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+              <div id="contact-admin-section" className="p-5 bg-slate-900/60 border border-slate-850 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="space-y-1 text-center md:text-left">
                   <h4 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
                     📞 Contacter l'administrateur
@@ -791,7 +873,7 @@ export default function App() {
               </div>
 
               {/* Non-production developer trigger for easy sandbox access */}
-              {productionLock === "none" && (
+              {sandboxModeEnabled && productionLock === "none" && (
                 <div className="text-center pt-6 border-t border-slate-900/60">
                   <button
                     onClick={() => {
@@ -810,7 +892,7 @@ export default function App() {
           {/* STUDENT MOBILE APP VIEW */}
           {activePortal === "student" && (
             <div className="py-1">
-              {showSandboxControls && (
+              {actualShowSandboxControls && (
                 <div className="text-center mb-4 max-w-sm mx-auto">
                   <span className="text-[9px] font-extrabold tracking-widest text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-500/10 uppercase">
                     Simulation Élève (Mobile)
@@ -909,6 +991,8 @@ export default function App() {
                 onUpdateProductionLock={setProductionLock}
                 onAddCourse={handleAddCourse}
                 onUpdateCourses={handleUpdateCourses}
+                sandboxModeEnabled={sandboxModeEnabled}
+                onUpdateSandboxMode={handleUpdateSandboxMode}
               />
             </div>
           )}
@@ -927,7 +1011,7 @@ export default function App() {
             Protection contre le téléchargement • Chiffrement des accès • Système d'attribution automatique de commissions
           </p>
 
-          {productionLock !== "none" && (
+          {sandboxModeEnabled && productionLock !== "none" && (
             <div className="pt-4 mt-4 border-t border-slate-900 flex justify-center">
               <button
                 id="btn-footer-unlock"
