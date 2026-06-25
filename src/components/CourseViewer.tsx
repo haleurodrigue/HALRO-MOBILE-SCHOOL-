@@ -34,8 +34,48 @@ export default function CourseViewer({
   const [activeTocId, setActiveTocId] = useState<string>("");
   
   // Custom interactive PDF Viewer States
-  const [zoomLevel, setZoomLevel] = useState<number>(100); // 75, 100, 115, 125, 150
+  const [zoomLevel, setZoomLevel] = useState<number>(100); // 0, 75, 100, 115, 125, 150
   const [showSidebar, setShowSidebar] = useState<boolean>(true);
+
+  // Click-and-drag panning states
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [dragScroll, setDragScroll] = useState({ left: 0, top: 0 });
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return; // Only left-click
+    
+    // Don't drag if clicking buttons, inputs, links, or select options
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('input') || target.closest('a') || target.closest('select')) {
+      return;
+    }
+
+    const container = e.currentTarget;
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX,
+      y: e.clientY
+    });
+    setDragScroll({
+      left: container.scrollLeft,
+      top: container.scrollTop
+    });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    const container = e.currentTarget;
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    container.scrollLeft = dragScroll.left - dx;
+    container.scrollTop = dragScroll.top - dy;
+  };
+
+  const handleMouseUpOrLeave = () => {
+    setIsDragging(false);
+  };
   const [showWatermarkSettings, setShowWatermarkSettings] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   
@@ -302,8 +342,8 @@ export default function CourseViewer({
           {/* Zoom controls */}
           <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
             <button
-              onClick={() => setZoomLevel(prev => Math.max(75, prev - 10))}
-              disabled={zoomLevel <= 75}
+              onClick={() => setZoomLevel(prev => Math.max(0, prev - 10))}
+              disabled={zoomLevel <= 0}
               className="p-1 hover:bg-slate-200 text-slate-500 disabled:opacity-30 rounded transition"
               title="Zoom Arrière"
             >
@@ -565,147 +605,161 @@ export default function CourseViewer({
         <div 
           id="pdf-document-scroll-canvas"
           onScroll={handleScroll}
-          className="flex-1 bg-slate-100/50 overflow-y-auto p-4 md:p-8 flex justify-center items-start h-full"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUpOrLeave}
+          onMouseLeave={handleMouseUpOrLeave}
+          className={`flex-1 bg-slate-100/50 overflow-auto p-4 md:p-8 flex items-start h-full select-none ${
+            isDragging ? "cursor-grabbing" : "cursor-grab"
+          }`}
         >
-          <div 
-            id="pdf-page-canvas" 
-            className="relative select-none border border-slate-200 bg-white text-slate-800 rounded-xl shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden shrink-0"
-            style={{ 
-              width: `${680 * (zoomLevel / 100)}px`, 
-              minHeight: "100%",
-              WebkitUserSelect: "none", 
-              userSelect: "none" 
-            }}
-          >
-            {/* CONTINUOUS SVG WATERMARK OVERLAY (Only if student) */}
-            {!isSuperAdmin && (
-              <div 
-                className="absolute inset-0 pointer-events-none z-0"
-                style={{ 
-                  backgroundImage: `url('${getSvgWatermarkDataUri()}')`,
-                  backgroundRepeat: 'repeat',
-                }}
-              />
-            )}
+          {zoomLevel === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center bg-white rounded-xl border border-slate-200 shadow-lg max-w-sm mx-auto my-auto animate-fade-in select-none">
+              <EyeOff size={32} className="text-slate-400 mb-2" />
+              <p className="text-xs font-bold text-slate-600">Document masqué (Zoom à 0%)</p>
+              <p className="text-[10px] text-slate-400 mt-1">Cliquez sur le bouton de zoom avant (+) pour afficher le document.</p>
+            </div>
+          ) : (
+            <div 
+              id="pdf-page-canvas" 
+              className="relative select-none border border-slate-200 bg-white text-slate-800 rounded-xl shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden shrink-0 mx-auto"
+              style={{ 
+                width: `${680 * (zoomLevel / 100)}px`, 
+                minHeight: "100%",
+                WebkitUserSelect: "none", 
+                userSelect: "none" 
+              }}
+            >
+              {/* CONTINUOUS SVG WATERMARK OVERLAY (Only if student) */}
+              {!isSuperAdmin && (
+                <div 
+                  className="absolute inset-0 pointer-events-none z-0"
+                  style={{ 
+                    backgroundImage: `url('${getSvgWatermarkDataUri()}')`,
+                    backgroundRepeat: 'repeat',
+                  }}
+                />
+              )}
 
-            {/* SECURITY VIOLATION OVERLAY (Ctrl+P blocking) */}
-            {showPrintWarning && (
-              <div className="fixed inset-0 bg-red-600/95 flex flex-col items-center justify-center text-center p-6 z-[1010] animate-fade-in text-white">
-                <ShieldAlert size={48} className="text-white mb-3 animate-bounce" />
-                <h3 className="text-xl font-black">TENTATIVE D'IMPRESSION BLOQUÉE</h3>
-                <p className="text-sm text-red-100 mt-2 max-w-sm">
-                  L'impression ou l'exportation de ce document est interdite afin de prévenir le partage illicite. 
-                  Votre matricule <strong className="text-white underline">{userMatricule}</strong> et votre code d'activation ont été tracés.
-                </p>
-              </div>
-            )}
-
-            {/* THE ACTUAL DOCUMENT CONTENT */}
-            <div className="relative z-10 flex-1 flex flex-col p-8 md:p-14">
-              
-              {/* Document Header */}
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-8 text-[10px] font-mono tracking-wider text-slate-400">
-                <span>SUPPORT PÉDAGOGIQUE - HALRO MOBILE SCHOOL</span>
-                <span>ID: {course.id}</span>
-              </div>
-
-              {/* Title & Author Info block */}
-              <div className="mb-8 space-y-3">
-                <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-extrabold uppercase tracking-wider border border-indigo-100">
-                  <FileText size={10} />
-                  <span>Document / Ouvrage de Cours</span>
+              {/* SECURITY VIOLATION OVERLAY (Ctrl+P blocking) */}
+              {showPrintWarning && (
+                <div className="fixed inset-0 bg-red-600/95 flex flex-col items-center justify-center text-center p-6 z-[1010] animate-fade-in text-white">
+                  <ShieldAlert size={48} className="text-white mb-3 animate-bounce" />
+                  <h3 className="text-xl font-black">TENTATIVE D'IMPRESSION BLOQUÉE</h3>
+                  <p className="text-sm text-red-100 mt-2 max-w-sm">
+                    L'impression ou l'exportation de ce document est interdite afin de prévenir le partage illicite. 
+                    Votre matricule <strong className="text-white underline">{userMatricule}</strong> et votre code d'activation ont été tracés.
+                  </p>
                 </div>
-                <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight leading-tight">
-                  {course.title}
-                </h1>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                  <span className="font-semibold text-slate-700">Enseignant : {course.authorName}</span>
-                  <span className="opacity-40">•</span>
-                  <span>Publié le {new Date(course.createdAt).toLocaleDateString("fr-FR")}</span>
-                  <span className="opacity-40">•</span>
-                  <span className="font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600">{course.content.length} caractères</span>
-                </div>
-                <hr className="border-slate-100" />
-              </div>
+              )}
 
-              {/* Printable-like Text Layout */}
-              <div className="flex-1">
+              {/* THE ACTUAL DOCUMENT CONTENT */}
+              <div className="relative z-10 flex-1 flex flex-col p-8 md:p-14">
                 
-                {/* Render Text content paragraph by paragraph */}
-                <div className="space-y-6">
-                  {course.content.split("\n").map((paragraph, idx) => {
-                    const isHeading = paragraph.trim().startsWith("#");
-                    const headingText = paragraph.replace(/^#+\s*/, "").trim();
-                    const headingLevel = isHeading ? (paragraph.match(/^#+/) || ["#"])[0].length : 0;
+                {/* Document Header */}
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-8 text-[10px] font-mono tracking-wider text-slate-400">
+                  <span>SUPPORT PÉDAGOGIQUE - HALRO MOBILE SCHOOL</span>
+                  <span>ID: {course.id}</span>
+                </div>
 
-                    if (isHeading) {
-                      if (headingLevel === 1) {
-                        return (
-                          <h2 
-                            key={idx} 
-                            className="book-paragraph text-xl md:text-2xl font-black text-slate-900 mt-8 mb-4 border-b border-slate-200 pb-2 scroll-mt-24"
-                          >
-                            {renderHighlightedContent(headingText)}
-                          </h2>
-                        );
-                      } else if (headingLevel === 2) {
-                        return (
-                          <h3 
-                            key={idx} 
-                            className="book-paragraph text-lg md:text-xl font-bold text-slate-800 mt-6 mb-3 scroll-mt-24"
-                          >
-                            {renderHighlightedContent(headingText)}
-                          </h3>
-                        );
-                      } else {
-                        return (
-                          <h4 
-                            key={idx} 
-                            className="book-paragraph text-base md:text-lg font-bold text-slate-700 mt-4 mb-2 scroll-mt-24"
-                          >
-                            {renderHighlightedContent(headingText)}
-                          </h4>
-                        );
+                {/* Title & Author Info block */}
+                <div className="mb-8 space-y-3">
+                  <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-extrabold uppercase tracking-wider border border-indigo-100">
+                    <FileText size={10} />
+                    <span>Document / Ouvrage de Cours</span>
+                  </div>
+                  <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight leading-tight">
+                    {course.title}
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                    <span className="font-semibold text-slate-700">Enseignant : {course.authorName}</span>
+                    <span className="opacity-40">•</span>
+                    <span>Publié le {new Date(course.createdAt).toLocaleDateString("fr-FR")}</span>
+                    <span className="opacity-40">•</span>
+                    <span className="font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600">{course.content.length} caractères</span>
+                  </div>
+                  <hr className="border-slate-100" />
+                </div>
+
+                {/* Printable-like Text Layout */}
+                <div className="flex-1">
+                  
+                  {/* Render Text content paragraph by paragraph */}
+                  <div className="space-y-6">
+                    {course.content.split("\n").map((paragraph, idx) => {
+                      const isHeading = paragraph.trim().startsWith("#");
+                      const headingText = paragraph.replace(/^#+\s*/, "").trim();
+                      const headingLevel = isHeading ? (paragraph.match(/^#+/) || ["#"])[0].length : 0;
+
+                      if (isHeading) {
+                        if (headingLevel === 1) {
+                          return (
+                            <h2 
+                              key={idx} 
+                              className="book-paragraph text-xl md:text-2xl font-black text-slate-900 mt-8 mb-4 border-b border-slate-200 pb-2 scroll-mt-24"
+                            >
+                              {renderHighlightedContent(headingText)}
+                            </h2>
+                          );
+                        } else if (headingLevel === 2) {
+                          return (
+                            <h3 
+                              key={idx} 
+                              className="book-paragraph text-lg md:text-xl font-bold text-slate-800 mt-6 mb-3 scroll-mt-24"
+                            >
+                              {renderHighlightedContent(headingText)}
+                            </h3>
+                          );
+                        } else {
+                          return (
+                            <h4 
+                              key={idx} 
+                              className="book-paragraph text-base md:text-lg font-bold text-slate-700 mt-4 mb-2 scroll-mt-24"
+                            >
+                              {renderHighlightedContent(headingText)}
+                            </h4>
+                          );
+                        }
                       }
-                    }
 
-                    if (!paragraph.trim()) {
-                      return <div key={idx} className="h-2"></div>;
-                    }
+                      if (!paragraph.trim()) {
+                        return <div key={idx} className="h-2"></div>;
+                      }
 
-                    return (
-                      <p 
-                        key={idx} 
-                        className="book-paragraph text-sm md:text-base leading-relaxed font-sans text-slate-800 text-justify scroll-mt-24"
-                      >
-                        {renderHighlightedContent(paragraph)}
-                      </p>
-                    );
-                  })}
+                      return (
+                        <p 
+                          key={idx} 
+                          className="book-paragraph text-sm md:text-base leading-relaxed font-sans text-slate-800 text-justify scroll-mt-24"
+                        >
+                          {renderHighlightedContent(paragraph)}
+                        </p>
+                      );
+                    })}
+                  </div>
+
+                </div>
+
+                {/* Document Footer */}
+                <div className="flex items-center justify-between border-t border-slate-200 pt-4 mt-12 text-[10px] font-mono text-slate-400">
+                  <span>HALRO MOBILE SCHOOL</span>
+                  <span className="font-bold">Fin de l'ouvrage</span>
                 </div>
 
               </div>
 
-              {/* Document Footer */}
-              <div className="flex items-center justify-between border-t border-slate-200 pt-4 mt-12 text-[10px] font-mono text-slate-400">
-                <span>HALRO MOBILE SCHOOL</span>
-                <span className="font-bold">Fin de l'ouvrage</span>
-              </div>
+              {/* Static Trace Security warning footer inside Page */}
+              {!isSuperAdmin ? (
+                <div className="relative z-10 bg-red-50 border-t border-red-100 p-2 text-center text-[9px] tracking-wider text-red-600 font-mono font-semibold">
+                  SÉCURISÉ PAR FILIGRANE INDÉLÉBILE • LICENCIÉ À : {studentInfo} • TOUTE COPIE S'EXPOSE À DES SANCTIONS
+                </div>
+              ) : (
+                <div className="relative z-10 bg-slate-50 border-t border-slate-100 p-2 text-center text-[9px] tracking-wider text-slate-500 font-mono font-semibold">
+                  ESPACE DE LECTURE ADMINISTRATEUR • IMPRESSION AUTORISÉE
+                </div>
+              )}
 
             </div>
-
-            {/* Static Trace Security warning footer inside Page */}
-            {!isSuperAdmin ? (
-              <div className="relative z-10 bg-red-50 border-t border-red-100 p-2 text-center text-[9px] tracking-wider text-red-600 font-mono font-semibold">
-                SÉCURISÉ PAR FILIGRANE INDÉLÉBILE • LICENCIÉ À : {studentInfo} • TOUTE COPIE S'EXPOSE À DES SANCTIONS
-              </div>
-            ) : (
-              <div className="relative z-10 bg-slate-50 border-t border-slate-100 p-2 text-center text-[9px] tracking-wider text-slate-500 font-mono font-semibold">
-                ESPACE DE LECTURE ADMINISTRATEUR • IMPRESSION AUTORISÉE
-              </div>
-            )}
-
-          </div>
+          )}
         </div>
 
       </div>
