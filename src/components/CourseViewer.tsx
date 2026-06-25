@@ -7,7 +7,8 @@ import React, { useState, useEffect } from "react";
 import { 
   ChevronLeft, ChevronRight, Download, Lock, ShieldAlert, 
   AlertTriangle, EyeOff, FileText, ZoomIn, ZoomOut, Sun, Moon, 
-  Layers, Settings, Search, Check, Sliders, Eye, X, ArrowUp
+  Layers, Settings, Search, Check, Sliders, Eye, X, ArrowUp,
+  BookOpen, Palette, Type, Baseline
 } from "lucide-react";
 import { Course } from "../types";
 import { jsPDF } from "jspdf";
@@ -84,6 +85,13 @@ export default function CourseViewer({
   const [watermarkOpacity, setWatermarkOpacity] = useState<number>(8); // percentage: 4%, 8%, 12%, 16%, 20%
   const [watermarkColor, setWatermarkColor] = useState<"red" | "indigo" | "gray" | "emerald">("red");
   const [watermarkCustomText, setWatermarkCustomText] = useState<string>("");
+
+  // WPS Reflow & Intelligent Reader Options (WPS Mode is enabled by default)
+  const [wpsMode, setWpsMode] = useState<boolean>(true);
+  const [readingTheme, setReadingTheme] = useState<"classic" | "creme" | "mint" | "night">("creme");
+  const [fontSize, setFontSize] = useState<number>(15);
+  const [lineHeightStyle, setLineHeightStyle] = useState<"tight" | "normal" | "loose">("normal");
+  const [showWpsSettings, setShowWpsSettings] = useState<boolean>(false);
 
   // Disable copy-paste, print screen events, and right click
   useEffect(() => {
@@ -234,6 +242,120 @@ export default function CourseViewer({
     );
   };
 
+  // WPS Premium reader presets & styling
+  const THEMES = {
+    classic: {
+      id: "classic" as const,
+      name: "Blanc Classique",
+      wrapperBg: "bg-slate-100",
+      sheetBg: "bg-white",
+      text: "text-slate-800",
+      headerText: "text-slate-900 border-slate-200",
+      muted: "text-slate-400 border-slate-200",
+      metaBg: "bg-slate-50 text-slate-500",
+      border: "border-slate-100",
+      badge: "bg-indigo-50 text-indigo-600 border-indigo-100",
+      footerBg: "bg-slate-50 border-t border-slate-200 text-slate-500"
+    },
+    creme: {
+      id: "creme" as const,
+      name: "Mode Crème (Papier)",
+      wrapperBg: "bg-[#e5ddd2]/95",
+      sheetBg: "bg-[#fcfaf2]",
+      text: "text-[#3e3224]",
+      headerText: "text-[#281c0e] font-serif border-[#ebdcb9]",
+      muted: "text-[#80705d] border-[#ebdcb9]",
+      metaBg: "bg-[#f5ebd6] text-[#705c47]",
+      border: "border-[#f1e6cc]",
+      badge: "bg-[#f5ebd6] text-[#6d4d26] border-[#dfcca0]",
+      footerBg: "bg-[#f5ebd6] border-t border-[#ebdcb9] text-[#705c47]"
+    },
+    mint: {
+      id: "mint" as const,
+      name: "Vert Protection Yeux",
+      wrapperBg: "bg-[#cbd9cd]/90",
+      sheetBg: "bg-[#f0f6f1]",
+      text: "text-[#1d2d1f]",
+      headerText: "text-[#0d1a0f] border-[#cbd9cd]",
+      muted: "text-[#5b735e] border-[#cbd9cd]",
+      metaBg: "bg-[#e2ebe2] text-[#3b543e]",
+      border: "border-[#e5ede5]",
+      badge: "bg-[#e2ebe2] text-[#22572b] border-[#cbd6cc]",
+      footerBg: "bg-[#e2ebe2] border-t border-[#cbd9cd] text-[#3b543e]"
+    },
+    night: {
+      id: "night" as const,
+      name: "Nuit Sombre",
+      wrapperBg: "bg-[#121314]",
+      sheetBg: "bg-[#1e2022]",
+      text: "text-[#d0d4d8]",
+      headerText: "text-white border-[#2d3033]",
+      muted: "text-[#7a8187] border-[#2d3033]",
+      metaBg: "bg-[#25282c] text-[#a0a8b0]",
+      border: "border-[#25282c]",
+      badge: "bg-[#2d2218]/40 text-amber-500 border-[#ffb266]/10",
+      footerBg: "bg-[#181a1b] border-t border-[#2d3033] text-[#7a8187]"
+    }
+  };
+
+  const activeTheme = THEMES[readingTheme] || THEMES.creme;
+
+  const getLineHeightVal = () => {
+    if (lineHeightStyle === "tight") return "1.4";
+    if (lineHeightStyle === "loose") return "1.9";
+    return "1.65"; // normal
+  };
+
+  const getProcessedParagraphs = () => {
+    if (!wpsMode) {
+      return course.content.split("\n");
+    }
+
+    const lines = course.content.split("\n");
+    const result: string[] = [];
+    let currentParagraph = "";
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      const isHeading = trimmed.startsWith("#");
+      const isBullet = trimmed.startsWith("-") || trimmed.startsWith("*") || trimmed.startsWith("•") || /^\d+[\.\s]/.test(trimmed);
+      const isPageMarker = trimmed.startsWith("---") || (trimmed.startsWith("#") && trimmed.includes("PAGE"));
+      const isEmpty = trimmed === "";
+
+      if (isHeading || isBullet || isPageMarker || isEmpty) {
+        if (currentParagraph) {
+          result.push(currentParagraph.trim());
+          currentParagraph = "";
+        }
+        if (!isEmpty) {
+          result.push(line);
+        }
+      } else {
+        if (currentParagraph) {
+          const lastChar = currentParagraph.trim().slice(-1);
+          const isSentenceEnded = /[.!?:]/.test(lastChar);
+          
+          if (isSentenceEnded) {
+            result.push(currentParagraph.trim());
+            currentParagraph = line;
+          } else {
+            currentParagraph += " " + trimmed;
+          }
+        } else {
+          currentParagraph = line;
+        }
+      }
+    }
+
+    if (currentParagraph) {
+      result.push(currentParagraph.trim());
+    }
+
+    return result;
+  };
+
   // Parse sections for Table of Contents
   const getTableOfContents = () => {
     const lines = course.content.split("\n");
@@ -382,6 +504,28 @@ export default function CourseViewer({
             )}
           </div>
 
+          {/* WPS Visualizer Settings Button */}
+          <button
+            onClick={() => {
+              setShowWpsSettings(!showWpsSettings);
+              setShowWatermarkSettings(false); // close watermark if open
+            }}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg border text-[11px] font-bold transition duration-200 ${
+              showWpsSettings 
+                ? "bg-indigo-50 border-indigo-200 text-indigo-700" 
+                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+            }`}
+            title="Options de visionneuse (Style WPS)"
+          >
+            <BookOpen size={13} className={wpsMode ? "text-indigo-600 animate-pulse" : ""} />
+            <span>Options WPS</span>
+            {wpsMode && (
+              <span className="bg-indigo-600 text-white font-extrabold px-1.5 py-0.5 rounded-full text-[8px] uppercase scale-90">
+                WPS
+              </span>
+            )}
+          </button>
+
           {/* Watermark customization button for student */}
           {!isSuperAdmin && (
             <button
@@ -461,142 +605,151 @@ export default function CourseViewer({
           </div>
         )}
 
-        {/* Dynamic Watermark Drawer for Student */}
-        {showWatermarkSettings && !isSuperAdmin && (
+        {/* WPS Visualizer Settings Drawer */}
+        {showWpsSettings && (
           <div className="absolute top-0 right-0 w-80 bg-white border-l border-slate-200 shadow-2xl h-full z-[1003] p-5 overflow-y-auto animate-fade-in flex flex-col justify-between">
-            <div className="space-y-5">
+            <div className="space-y-6">
+              
+              {/* Header */}
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center space-x-2">
-                  <Settings size={15} className="text-amber-500" />
-                  <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Filigrane dynamique</h4>
+                  <BookOpen size={16} className="text-indigo-600" />
+                  <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Options Visionneuse WPS</h4>
                 </div>
                 <button
-                  onClick={() => setShowWatermarkSettings(false)}
+                  onClick={() => setShowWpsSettings(false)}
                   className="text-xs text-slate-400 hover:text-slate-600"
                 >
                   ✕
                 </button>
               </div>
 
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                Le filigrane dynamique sert de traceur indélébile pour protéger les supports de cours contre la capture ou le partage illicite.
-              </p>
-
-              {/* Layout Selection */}
+              {/* Section 1: Intelligent Reflow Mode */}
               <div className="space-y-2">
                 <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                  Disposition
+                  Mode Relecture Reflow
                 </label>
-                <div className="grid grid-cols-1 gap-1.5">
+                <p className="text-[10px] text-slate-400 leading-relaxed mb-2">
+                  Reconstruit les phrases découpées et supprime les grands interlignes artificiels générés par l'import PDF.
+                </p>
+                <div className="flex gap-2">
                   <button
-                    onClick={() => setWatermarkStyle("diagonal")}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold border text-left transition ${
-                      watermarkStyle === "diagonal"
-                        ? "bg-amber-50 border-amber-200 text-amber-700"
+                    onClick={() => setWpsMode(true)}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold border transition text-center ${
+                      wpsMode 
+                        ? "bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm" 
                         : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
                     }`}
                   >
-                    <span>Diagonal standard</span>
-                    {watermarkStyle === "diagonal" && <Check size={12} />}
+                    Activer WPS
                   </button>
-
                   <button
-                    onClick={() => setWatermarkStyle("grid")}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold border text-left transition ${
-                      watermarkStyle === "grid"
-                        ? "bg-amber-50 border-amber-200 text-amber-700"
+                    onClick={() => setWpsMode(false)}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold border transition text-center ${
+                      !wpsMode 
+                        ? "bg-slate-100 border-slate-300 text-slate-700 shadow-sm" 
                         : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
                     }`}
                   >
-                    <span>Grille de traçage dense</span>
-                    {watermarkStyle === "grid" && <Check size={12} />}
-                  </button>
-
-                  <button
-                    onClick={() => setWatermarkStyle("split")}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold border text-left transition ${
-                      watermarkStyle === "split"
-                        ? "bg-amber-50 border-amber-200 text-amber-700"
-                        : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-                    }`}
-                  >
-                    <span>En-tête et pied de page</span>
-                    {watermarkStyle === "split" && <Check size={12} />}
+                    Texte Brut
                   </button>
                 </div>
               </div>
 
-              {/* Opacity Selection */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                    Opacité
-                  </label>
-                  <span className="text-[10px] font-mono text-amber-600 font-bold">{watermarkOpacity}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="4"
-                  max="20"
-                  step="4"
-                  value={watermarkOpacity}
-                  onChange={(e) => setWatermarkOpacity(Number(e.target.value))}
-                  className="w-full accent-amber-500 h-1 bg-slate-100 rounded-lg cursor-pointer"
-                />
-                <div className="flex justify-between text-[9px] text-slate-400">
-                  <span>Léger (4%)</span>
-                  <span>Visible (20%)</span>
-                </div>
-              </div>
-
-              {/* Color Selection */}
+              {/* Section 2: Paper Theme */}
               <div className="space-y-2">
                 <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                  Couleur du filigrane
+                  Thème du papier (Couleur)
                 </label>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {(["red", "indigo", "emerald", "gray"] as const).map((color) => {
-                    const mapLabels = { red: "Rouge", indigo: "Indigo", emerald: "Vert", gray: "Gris" };
-                    const mapColorBg = { red: "bg-red-500", indigo: "bg-indigo-500", emerald: "bg-emerald-500", gray: "bg-slate-400" };
-                    const isSelected = watermarkColor === color;
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.values(THEMES).map((theme) => {
+                    const isSelected = readingTheme === theme.id;
                     return (
                       <button
-                        key={color}
-                        onClick={() => setWatermarkColor(color)}
-                        className={`flex flex-col items-center p-2 rounded-lg border text-[9px] font-bold transition capitalize ${
+                        key={theme.id}
+                        onClick={() => setReadingTheme(theme.id)}
+                        className={`p-2.5 rounded-lg border text-left flex flex-col justify-between h-16 transition ${
                           isSelected 
-                            ? "bg-amber-50 border-amber-300 text-amber-700" 
-                            : "bg-white border-slate-200 text-slate-400"
-                        }`}
+                            ? "border-indigo-600 ring-2 ring-indigo-600/10" 
+                            : "border-slate-200 hover:border-slate-300"
+                        } ${theme.sheetBg}`}
                       >
-                        <span className={`w-3 h-3 rounded-full ${mapColorBg[color]} mb-1`}></span>
-                        <span>{mapLabels[color]}</span>
+                        <span className={`text-[10px] font-black tracking-tight ${theme.text}`}>
+                          {theme.name}
+                        </span>
+                        <div className="flex gap-1">
+                          <span className="w-2.5 h-2.5 rounded-full bg-slate-400 opacity-20"></span>
+                          <span className="w-4 h-1.5 rounded-full bg-indigo-500/30"></span>
+                        </div>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Custom Overlay text */}
+              {/* Section 3: Font Size */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                    Taille du texte
+                  </label>
+                  <span className="text-[10px] font-mono text-indigo-600 font-bold">{fontSize}px</span>
+                </div>
+                <div className="flex items-center space-x-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                  <button
+                    onClick={() => setFontSize(prev => Math.max(12, prev - 1))}
+                    disabled={fontSize <= 12}
+                    className="flex-1 py-1 bg-white hover:bg-slate-100 text-slate-700 font-extrabold text-xs rounded border border-slate-200 disabled:opacity-30 transition"
+                  >
+                    A-
+                  </button>
+                  <button
+                    onClick={() => setFontSize(15)}
+                    className="px-3 py-1 text-[10px] text-slate-400 font-semibold hover:text-slate-600"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    onClick={() => setFontSize(prev => Math.min(24, prev + 1))}
+                    disabled={fontSize >= 24}
+                    className="flex-1 py-1 bg-white hover:bg-slate-100 text-slate-700 font-extrabold text-xs rounded border border-slate-200 disabled:opacity-30 transition"
+                  >
+                    A+
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 4: Line Height / Spacing */}
               <div className="space-y-2">
                 <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                  Texte de garde additionnel
+                  Espacement des lignes
                 </label>
-                <input
-                  type="text"
-                  maxLength={25}
-                  value={watermarkCustomText}
-                  onChange={(e) => setWatermarkCustomText(e.target.value)}
-                  placeholder="Ex: DIFFUSION INTERDITE"
-                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                />
+                <div className="grid grid-cols-3 gap-1 bg-slate-50 p-1 rounded-lg border border-slate-150">
+                  {(["tight", "normal", "loose"] as const).map((spacing) => {
+                    const label = spacing === "tight" ? "Serré" : spacing === "loose" ? "Aéré" : "Normal";
+                    const isSelected = lineHeightStyle === spacing;
+                    return (
+                      <button
+                        key={spacing}
+                        onClick={() => setLineHeightStyle(spacing)}
+                        className={`py-1.5 text-[10px] font-bold rounded-md transition text-center ${
+                          isSelected 
+                            ? "bg-white text-indigo-700 shadow-sm" 
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
             </div>
 
-            <div className="border-t border-slate-100 pt-4 text-[9px] text-slate-400 flex items-center space-x-2">
-              <ShieldAlert size={12} className="text-red-500 shrink-0" />
-              <span>Traceurs de sécurité injectés de manière permanente pour tracer le support de cours.</span>
+            <div className="border-t border-slate-100 pt-4 text-[9px] text-slate-400 flex items-center space-x-2 mt-6">
+              <Check size={12} className="text-emerald-500 shrink-0" />
+              <span>Réglages mémorisés pour votre session actuelle de lecture de cours.</span>
             </div>
           </div>
         )}
@@ -609,7 +762,7 @@ export default function CourseViewer({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUpOrLeave}
           onMouseLeave={handleMouseUpOrLeave}
-          className={`flex-1 bg-slate-100/50 overflow-auto p-4 md:p-8 flex items-start h-full select-none ${
+          className={`flex-1 overflow-auto p-4 md:p-8 flex items-start h-full select-none transition-all duration-300 ${activeTheme.wrapperBg} ${
             isDragging ? "cursor-grabbing" : "cursor-grab"
           }`}
         >
@@ -623,7 +776,7 @@ export default function CourseViewer({
             <div className="min-w-full flex justify-center items-start shrink-0 py-2">
               <div 
                 id="pdf-page-canvas" 
-                className="relative select-none border border-slate-200 bg-white text-slate-800 rounded-xl shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden shrink-0"
+                className={`relative select-none border rounded-xl shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden shrink-0 ${activeTheme.sheetBg} ${activeTheme.text} ${activeTheme.border}`}
                 style={{ 
                   width: `${680 * (zoomLevel / 100)}px`, 
                   minHeight: "100%",
@@ -658,46 +811,48 @@ export default function CourseViewer({
               <div className="relative z-10 flex-1 flex flex-col p-8 md:p-14">
                 
                 {/* Document Header */}
-                <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-8 text-[10px] font-mono tracking-wider text-slate-400">
+                <div className={`flex items-center justify-between border-b pb-3 mb-8 text-[10px] font-mono tracking-wider ${activeTheme.muted}`}>
                   <span>SUPPORT PÉDAGOGIQUE - HALRO MOBILE SCHOOL</span>
                   <span>ID: {course.id}</span>
                 </div>
 
                 {/* Title & Author Info block */}
                 <div className="mb-8 space-y-3">
-                  <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-extrabold uppercase tracking-wider border border-indigo-100">
+                  <div className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${activeTheme.badge}`}>
                     <FileText size={10} />
                     <span>Document / Ouvrage de Cours</span>
                   </div>
-                  <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight leading-tight">
+                  <h1 className={`text-2xl md:text-3xl font-black tracking-tight leading-tight ${activeTheme.headerText}`}>
                     {course.title}
                   </h1>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                    <span className="font-semibold text-slate-700">Enseignant : {course.authorName}</span>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs opacity-80">
+                    <span className="font-semibold">Enseignant : {course.authorName}</span>
                     <span className="opacity-40">•</span>
                     <span>Publié le {new Date(course.createdAt).toLocaleDateString("fr-FR")}</span>
                     <span className="opacity-40">•</span>
-                    <span className="font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600">{course.content.length} caractères</span>
+                    <span className={`font-mono text-[10px] px-2 py-0.5 rounded ${activeTheme.metaBg}`}>{course.content.length} caractères</span>
                   </div>
-                  <hr className="border-slate-100" />
+                  <hr className={activeTheme.border} />
                 </div>
 
                 {/* Printable-like Text Layout */}
                 <div className="flex-1">
                   
                   {/* Render Text content paragraph by paragraph */}
-                  <div className="space-y-6">
-                    {course.content.split("\n").map((paragraph, idx) => {
-                      const isHeading = paragraph.trim().startsWith("#");
-                      const headingText = paragraph.replace(/^#+\s*/, "").trim();
-                      const headingLevel = isHeading ? (paragraph.match(/^#+/) || ["#"])[0].length : 0;
+                  <div className="space-y-4">
+                    {getProcessedParagraphs().map((paragraph, idx) => {
+                      const trimmed = paragraph.trim();
+                      const isHeading = trimmed.startsWith("#");
+                      const headingText = trimmed.replace(/^#+\s*/, "").trim();
+                      const headingLevel = isHeading ? (trimmed.match(/^#+/) || ["#"])[0].length : 0;
+                      const isBullet = trimmed.startsWith("-") || trimmed.startsWith("*") || trimmed.startsWith("•");
 
                       if (isHeading) {
                         if (headingLevel === 1) {
                           return (
                             <h2 
                               key={idx} 
-                              className="book-paragraph text-xl md:text-2xl font-black text-slate-900 mt-8 mb-4 border-b border-slate-200 pb-2 scroll-mt-24"
+                              className={`book-paragraph text-xl md:text-2xl font-black mt-8 mb-4 border-b pb-2 scroll-mt-24 ${activeTheme.headerText}`}
                             >
                               {renderHighlightedContent(headingText)}
                             </h2>
@@ -706,7 +861,7 @@ export default function CourseViewer({
                           return (
                             <h3 
                               key={idx} 
-                              className="book-paragraph text-lg md:text-xl font-bold text-slate-800 mt-6 mb-3 scroll-mt-24"
+                              className={`book-paragraph text-lg md:text-xl font-bold mt-6 mb-3 scroll-mt-24 ${activeTheme.headerText}`}
                             >
                               {renderHighlightedContent(headingText)}
                             </h3>
@@ -715,7 +870,7 @@ export default function CourseViewer({
                           return (
                             <h4 
                               key={idx} 
-                              className="book-paragraph text-base md:text-lg font-bold text-slate-700 mt-4 mb-2 scroll-mt-24"
+                              className={`book-paragraph text-base md:text-lg font-bold mt-4 mb-2 scroll-mt-24 ${activeTheme.headerText}`}
                             >
                               {renderHighlightedContent(headingText)}
                             </h4>
@@ -723,14 +878,38 @@ export default function CourseViewer({
                         }
                       }
 
-                      if (!paragraph.trim()) {
+                      if (!trimmed) {
                         return <div key={idx} className="h-2"></div>;
+                      }
+
+                      if (isBullet) {
+                        const cleanBulletText = trimmed.replace(/^[-*•]\s*/, "");
+                        return (
+                          <li 
+                            key={idx} 
+                            className="book-paragraph text-sm md:text-base ml-6 list-disc font-sans text-justify scroll-mt-24 pl-2 my-2"
+                            style={{ 
+                              fontSize: `${fontSize}px`, 
+                              lineHeight: getLineHeightVal(),
+                              color: activeTheme.id === "night" ? "#d0d4d8" : undefined
+                            }}
+                          >
+                            {renderHighlightedContent(cleanBulletText)}
+                          </li>
+                        );
                       }
 
                       return (
                         <p 
                           key={idx} 
-                          className="book-paragraph text-sm md:text-base leading-relaxed font-sans text-slate-800 text-justify scroll-mt-24"
+                          className="book-paragraph text-sm md:text-base font-sans text-justify scroll-mt-24"
+                          style={{ 
+                            fontSize: `${fontSize}px`, 
+                            lineHeight: getLineHeightVal(),
+                            marginBottom: "1.25rem",
+                            textIndent: wpsMode ? "1.5rem" : "0",
+                            color: activeTheme.id === "night" ? "#d0d4d8" : undefined
+                          }}
                         >
                           {renderHighlightedContent(paragraph)}
                         </p>
@@ -741,7 +920,7 @@ export default function CourseViewer({
                 </div>
 
                 {/* Document Footer */}
-                <div className="flex items-center justify-between border-t border-slate-200 pt-4 mt-12 text-[10px] font-mono text-slate-400">
+                <div className={`flex items-center justify-between border-t pt-4 mt-12 text-[10px] font-mono ${activeTheme.muted}`}>
                   <span>HALRO MOBILE SCHOOL</span>
                   <span className="font-bold">Fin de l'ouvrage</span>
                 </div>
@@ -750,11 +929,19 @@ export default function CourseViewer({
 
               {/* Static Trace Security warning footer inside Page */}
               {!isSuperAdmin ? (
-                <div className="relative z-10 bg-red-50 border-t border-red-100 p-2 text-center text-[9px] tracking-wider text-red-600 font-mono font-semibold">
+                <div className={`relative z-10 p-2 text-center text-[9px] tracking-wider font-mono font-semibold ${
+                  activeTheme.id === "night" 
+                    ? "bg-red-950/20 border-t border-red-900/40 text-red-400" 
+                    : "bg-red-50 border-t border-red-100 text-red-600"
+                }`}>
                   SÉCURISÉ PAR FILIGRANE INDÉLÉBILE • LICENCIÉ À : {studentInfo} • TOUTE COPIE S'EXPOSE À DES SANCTIONS
                 </div>
               ) : (
-                <div className="relative z-10 bg-slate-50 border-t border-slate-100 p-2 text-center text-[9px] tracking-wider text-slate-500 font-mono font-semibold">
+                <div className={`relative z-10 p-2 text-center text-[9px] tracking-wider font-mono font-semibold ${
+                  activeTheme.id === "night"
+                    ? "bg-[#181a1b] border-t border-[#2d3033] text-slate-500"
+                    : "bg-slate-50 border-t border-slate-100 text-slate-500"
+                }`}>
                   ESPACE DE LECTURE ADMINISTRATEUR • IMPRESSION AUTORISÉE
                 </div>
               )}
