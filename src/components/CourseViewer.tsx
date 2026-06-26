@@ -1058,7 +1058,7 @@ export default function CourseViewer({
           className={`flex-1 overflow-auto p-4 md:p-8 flex justify-center items-start h-full select-none transition-all duration-300 ${activeTheme.wrapperBg} ${
             isDragging ? "cursor-grabbing" : "cursor-grab"
           }`}
-          style={{ scrollSnapType: "y mandatory", scrollBehavior: "smooth" }}
+          style={{ scrollBehavior: "smooth" }}
         >
           {zoomLevel === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center bg-white rounded-xl border border-slate-200 shadow-lg max-w-sm mx-auto my-auto animate-fade-in select-none">
@@ -1078,9 +1078,7 @@ export default function CourseViewer({
                       width: `${680 * (zoomLevel / 100)}px`, 
                       minHeight: `${880 * (zoomLevel / 100)}px`,
                       WebkitUserSelect: "none", 
-                      userSelect: "none",
-                      scrollSnapAlign: "start",
-                      scrollSnapStop: "always"
+                      userSelect: "none"
                     }}
                   >
                     {/* CONTINUOUS SVG WATERMARK OVERLAY (Only if student, repeated on every single page) */}
