@@ -611,6 +611,27 @@ export default function AdminPortal({
     onUpdateCodes(updated);
   };
 
+  const handleActivateStudent = (id: string) => {
+    const updated = studentCodes.map(c => 
+      c.id === id ? { ...c, status: "active" as const, devicesUsed: [] } : c
+    );
+    onUpdateCodes(updated);
+  };
+
+  const handleActivateTeacher = (id: string) => {
+    const updated = teachers.map(t => 
+      t.id === id ? { ...t, status: "active" as const } : t
+    );
+    onUpdateTeachers(updated);
+  };
+
+  const handleDeactivateTeacher = (id: string) => {
+    const updated = teachers.map(t => 
+      t.id === id ? { ...t, status: "deactivated" as const } : t
+    );
+    onUpdateTeachers(updated);
+  };
+
   const handleDeleteStudent = (id: string) => {
     const updated = studentCodes.filter(c => c.id !== id);
     onUpdateCodes(updated);
@@ -1183,7 +1204,8 @@ export default function AdminPortal({
                       <th className="py-2">Solde Actuel</th>
                       <th className="py-2">Coordonnées de paiement</th>
                       <th className="py-2">Autorisations</th>
-                      <th className="py-2">Actions</th>
+                      <th className="py-2">Statut</th>
+                      <th className="py-2 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-850">
@@ -1229,6 +1251,37 @@ export default function AdminPortal({
                           </div>
                         </td>
                         <td className="py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            teacher.status === "deactivated"
+                              ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                              : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          }`}>
+                            {teacher.status === "deactivated" ? "Désactivé" : "Actif"}
+                          </span>
+                        </td>
+                        <td className="py-3 text-right space-x-2 whitespace-nowrap">
+                          <button
+                            onClick={() => handleActivateTeacher(teacher.id)}
+                            disabled={teacher.status !== "deactivated"}
+                            className={`px-2 py-1 rounded text-[10px] font-bold transition inline-block align-middle ${
+                              teacher.status !== "deactivated"
+                                ? "bg-slate-950 text-slate-600 border border-slate-900 cursor-not-allowed opacity-50"
+                                : "bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/20 text-emerald-400 cursor-pointer"
+                            }`}
+                          >
+                            Activer
+                          </button>
+                          <button
+                            onClick={() => handleDeactivateTeacher(teacher.id)}
+                            disabled={teacher.status === "deactivated"}
+                            className={`px-2 py-1 rounded text-[10px] font-bold transition inline-block align-middle ${
+                              teacher.status === "deactivated"
+                                ? "bg-slate-950 text-slate-600 border border-slate-900 cursor-not-allowed opacity-50"
+                                : "bg-red-950 hover:bg-red-900 border border-red-500/10 text-red-400 cursor-pointer"
+                            }`}
+                          >
+                            Désactiver
+                          </button>
                           {onDeleteTeacher && (
                             <button
                               onClick={() => {
@@ -1236,7 +1289,7 @@ export default function AdminPortal({
                                   onDeleteTeacher(teacher.id);
                                 }
                               }}
-                              className="text-slate-500 hover:text-red-400 p-1 rounded transition"
+                              className="text-slate-500 hover:text-red-400 p-1 rounded transition inline-block align-middle"
                               title="Supprimer cet enseignant"
                             >
                               <Trash2 size={14} />
@@ -1703,19 +1756,34 @@ export default function AdminPortal({
                             </span>
                           </td>
                           <td className="py-3 text-right space-x-2">
-                            {student.status === "active" && !isExpired && (
-                              <button
-                                id={`admin-deactivate-btn-${student.id}`}
-                                onClick={() => handleDeactivateStudent(student.id)}
-                                className="px-2 py-1 bg-red-950 hover:bg-red-900 border border-red-500/10 text-red-400 rounded text-[10px] font-bold cursor-pointer"
-                              >
-                                Désactiver
-                              </button>
-                            )}
+                            <button
+                              id={`admin-activate-btn-${student.id}`}
+                              onClick={() => handleActivateStudent(student.id)}
+                              disabled={student.status === "active" && !isExpired}
+                              className={`px-2 py-1 rounded text-[10px] font-bold transition ${
+                                student.status === "active" && !isExpired
+                                  ? "bg-slate-950 text-slate-600 border border-slate-900 cursor-not-allowed opacity-50"
+                                  : "bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/20 text-emerald-400 cursor-pointer"
+                              }`}
+                            >
+                              Activer
+                            </button>
+                            <button
+                              id={`admin-deactivate-btn-${student.id}`}
+                              onClick={() => handleDeactivateStudent(student.id)}
+                              disabled={student.status !== "active" || isExpired}
+                              className={`px-2 py-1 rounded text-[10px] font-bold transition ${
+                                student.status !== "active" || isExpired
+                                  ? "bg-slate-950 text-slate-600 border border-slate-900 cursor-not-allowed opacity-50"
+                                  : "bg-red-950 hover:bg-red-900 border border-red-500/10 text-red-400 cursor-pointer"
+                              }`}
+                            >
+                              Désactiver
+                            </button>
                             <button
                               id={`admin-delete-btn-${student.id}`}
                               onClick={() => handleDeleteStudent(student.id)}
-                              className="p-1 text-slate-500 hover:text-red-400 transition"
+                              className="p-1 text-slate-500 hover:text-red-400 transition inline-block align-middle"
                               title="Supprimer définitivement"
                             >
                               <Trash2 size={13} />

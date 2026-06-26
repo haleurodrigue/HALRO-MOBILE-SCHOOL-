@@ -39,6 +39,7 @@ export interface Teacher {
   permissions: TeacherPermissions;
   createdAt: string;
   isSimulated?: boolean;
+  status?: "active" | "deactivated";
 }
 
 export type AccessCodeType = "temporary" | "definitive";

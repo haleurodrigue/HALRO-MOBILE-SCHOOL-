@@ -113,7 +113,12 @@ export default function StudentMobileApp({
     let updatedDevices = [...codeObj.devicesUsed];
     if (!updatedDevices.includes(currentDeviceId)) {
       if (updatedDevices.length >= 2) {
-        setErrorMsg("Connexion impossible : Ce code est déjà utilisé sur 2 autres appareils (maximum de 2 appareils autorisé).");
+        // Automatically deactivate the student code on 3rd device login attempt
+        const updated = studentCodes.map(c => 
+          c.code === trimmed ? { ...c, status: "deactivated" as const, devicesUsed: [...updatedDevices, currentDeviceId] } : c
+        );
+        onUpdateCodes(updated);
+        setErrorMsg("Ce code d'accès a été automatiquement désactivé suite à une tentative d'utilisation simultanée sur un 3ème appareil (maximum de 2 appareils autorisés). Veuillez contacter l'administration principale.");
         return;
       }
       updatedDevices.push(currentDeviceId);

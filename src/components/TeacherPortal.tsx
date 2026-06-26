@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Key, UserCheck, DollarSign, Send, RefreshCw, PlusCircle, FilePlus, 
   Trash2, ShieldAlert, LogOut, CheckCircle, Users, Layers, BookOpen, AlertCircle
@@ -186,6 +186,22 @@ export default function TeacherPortal({
   const [loginMatricule, setLoginMatricule] = useState("");
   const [activeTeacher, setActiveTeacher] = useState<Teacher | null>(null);
   const [loginError, setLoginError] = useState("");
+
+  // Automatically sign out if teacher is deleted or deactivated by the admin
+  useEffect(() => {
+    if (activeTeacher) {
+      const current = teachers.find(t => t.id === activeTeacher.id);
+      if (!current) {
+        setActiveTeacher(null);
+        setLoginMatricule("");
+        setLoginError("Votre compte enseignant a été supprimé par l'administration.");
+      } else if (current.status === "deactivated") {
+        setActiveTeacher(null);
+        setLoginMatricule("");
+        setLoginError("Votre compte enseignant a été désactivé par l'administration.");
+      }
+    }
+  }, [teachers, activeTeacher]);
   
   // States for Teacher Actions
   const [courseTitle, setCourseTitle] = useState("");
@@ -242,6 +258,11 @@ export default function TeacherPortal({
     const found = teachers.find(t => t.matricule === trimmed);
     if (!found) {
       setLoginError("Enseignant non trouvé. Seul le matricule enseignant (Ex: ENS-1024) est autorisé.");
+      return;
+    }
+
+    if (found.status === "deactivated") {
+      setLoginError("Votre compte enseignant a été désactivé par l'administration.");
       return;
     }
 
