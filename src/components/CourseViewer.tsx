@@ -319,32 +319,45 @@ export default function CourseViewer({
       const line = lines[i];
       const trimmed = line.trim();
 
-      const isHeading = trimmed.startsWith("#");
-      const isBullet = trimmed.startsWith("-") || trimmed.startsWith("*") || trimmed.startsWith("•") || /^\d+[\.\s]/.test(trimmed);
-      const isPageMarker = trimmed.startsWith("---") || (trimmed.startsWith("#") && trimmed.includes("PAGE"));
-      const isEmpty = trimmed === "";
-
-      if (isHeading || isBullet || isPageMarker || isEmpty) {
+      if (trimmed === "") {
         if (currentParagraph) {
           result.push(currentParagraph.trim());
           currentParagraph = "";
         }
-        if (!isEmpty) {
-          result.push(line);
+        continue;
+      }
+
+      const isHeading = trimmed.startsWith("#");
+      const isBullet = trimmed.startsWith("-") || trimmed.startsWith("*") || trimmed.startsWith("•") || /^\d+[\.\s]/.test(trimmed);
+      const isPageMarker = trimmed.startsWith("---") || (trimmed.startsWith("#") && trimmed.toUpperCase().includes("PAGE"));
+
+      if (isHeading || isBullet || isPageMarker) {
+        if (currentParagraph) {
+          result.push(currentParagraph.trim());
+          currentParagraph = "";
         }
+        result.push(trimmed);
       } else {
         if (currentParagraph) {
-          const lastChar = currentParagraph.trim().slice(-1);
-          const isSentenceEnded = /[.!?:]/.test(lastChar);
-          
-          if (isSentenceEnded) {
-            result.push(currentParagraph.trim());
-            currentParagraph = line;
+          // Handle hyphens split at the end of line
+          if (currentParagraph.endsWith("-")) {
+            currentParagraph = currentParagraph.slice(0, -1) + trimmed;
           } else {
-            currentParagraph += " " + trimmed;
+            const lastChar = currentParagraph.trim().slice(-1);
+            const isSentenceEnded = /[.!?:]/.test(lastChar);
+            
+            // If the current line starts with lowercase, merge it anyway!
+            const isNextLower = trimmed.length > 0 && trimmed[0] === trimmed[0].toLowerCase();
+            
+            if (isSentenceEnded && !isNextLower) {
+              result.push(currentParagraph.trim());
+              currentParagraph = trimmed;
+            } else {
+              currentParagraph += " " + trimmed;
+            }
           }
         } else {
-          currentParagraph = line;
+          currentParagraph = trimmed;
         }
       }
     }
@@ -353,7 +366,58 @@ export default function CourseViewer({
       result.push(currentParagraph.trim());
     }
 
-    return result;
+    return result
+      .map(p => p.replace(/\s+/g, " "))
+      .filter(p => p.trim() !== "");
+  };
+
+  const getPages = () => {
+    const paragraphs = getProcessedParagraphs();
+    const pages: string[][] = [];
+    let currentPage: string[] = [];
+    let currentLength = 0;
+
+    for (const p of paragraphs) {
+      const trimmed = p.trim();
+      const isPageMarker = trimmed.startsWith("---") || (trimmed.startsWith("#") && trimmed.toUpperCase().includes("PAGE"));
+      
+      if (isPageMarker) {
+        if (currentPage.length > 0) {
+          pages.push(currentPage);
+          currentPage = [];
+          currentLength = 0;
+        }
+        continue;
+      }
+
+      const isMainHeading = trimmed.startsWith("# ") || trimmed.startsWith("## ");
+      if (isMainHeading && currentLength > 800) {
+        pages.push(currentPage);
+        currentPage = [p];
+        currentLength = trimmed.length;
+        continue;
+      }
+
+      if (currentLength > 1600 || currentPage.length >= 10) {
+        pages.push(currentPage);
+        currentPage = [p];
+        currentLength = trimmed.length;
+        continue;
+      }
+
+      currentPage.push(p);
+      currentLength += trimmed.length;
+    }
+
+    if (currentPage.length > 0) {
+      pages.push(currentPage);
+    }
+
+    if (pages.length === 0) {
+      pages.push([""]);
+    }
+
+    return pages;
   };
 
   // Parse sections for Table of Contents
@@ -762,7 +826,7 @@ export default function CourseViewer({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUpOrLeave}
           onMouseLeave={handleMouseUpOrLeave}
-          className={`flex-1 overflow-auto p-4 md:p-8 flex items-start h-full select-none transition-all duration-300 ${activeTheme.wrapperBg} ${
+          className={`flex-1 overflow-auto p-4 md:p-8 flex justify-center items-start h-full select-none transition-all duration-300 ${activeTheme.wrapperBg} ${
             isDragging ? "cursor-grabbing" : "cursor-grab"
           }`}
         >
@@ -773,181 +837,183 @@ export default function CourseViewer({
               <p className="text-[10px] text-slate-400 mt-1">Cliquez sur le bouton de zoom avant (+) pour afficher le document.</p>
             </div>
           ) : (
-            <div className="min-w-full flex justify-center items-start shrink-0 py-2">
-              <div 
-                id="pdf-page-canvas" 
-                className={`relative select-none border rounded-xl shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden shrink-0 ${activeTheme.sheetBg} ${activeTheme.text} ${activeTheme.border}`}
-                style={{ 
-                  width: `${680 * (zoomLevel / 100)}px`, 
-                  minHeight: "100%",
-                  WebkitUserSelect: "none", 
-                  userSelect: "none" 
-                }}
-              >
-              {/* CONTINUOUS SVG WATERMARK OVERLAY (Only if student) */}
-              {!isSuperAdmin && (
-                <div 
-                  className="absolute inset-0 pointer-events-none z-0"
-                  style={{ 
-                    backgroundImage: `url('${getSvgWatermarkDataUri()}')`,
-                    backgroundRepeat: 'repeat',
-                  }}
-                />
-              )}
+            <div className="flex flex-col items-center gap-8 py-4 w-full">
+              {getPages().map((pageParagraphs, pageIndex, allPages) => {
+                return (
+                  <div 
+                    key={pageIndex}
+                    id={`pdf-page-${pageIndex}`}
+                    className={`relative select-none border rounded-xl shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden shrink-0 ${activeTheme.sheetBg} ${activeTheme.text} ${activeTheme.border}`}
+                    style={{ 
+                      width: `${680 * (zoomLevel / 100)}px`, 
+                      minHeight: `${880 * (zoomLevel / 100)}px`,
+                      WebkitUserSelect: "none", 
+                      userSelect: "none" 
+                    }}
+                  >
+                    {/* CONTINUOUS SVG WATERMARK OVERLAY (Only if student, repeated on every single page) */}
+                    {!isSuperAdmin && (
+                      <div 
+                        className="absolute inset-0 pointer-events-none z-0"
+                        style={{ 
+                          backgroundImage: `url('${getSvgWatermarkDataUri()}')`,
+                          backgroundRepeat: 'repeat',
+                        }}
+                      />
+                    )}
 
-              {/* SECURITY VIOLATION OVERLAY (Ctrl+P blocking) */}
-              {showPrintWarning && (
-                <div className="fixed inset-0 bg-red-600/95 flex flex-col items-center justify-center text-center p-6 z-[1010] animate-fade-in text-white">
-                  <ShieldAlert size={48} className="text-white mb-3 animate-bounce" />
-                  <h3 className="text-xl font-black">TENTATIVE D'IMPRESSION BLOQUÉE</h3>
-                  <p className="text-sm text-red-100 mt-2 max-w-sm">
-                    L'impression ou l'exportation de ce document est interdite afin de prévenir le partage illicite. 
-                    Votre matricule <strong className="text-white underline">{userMatricule}</strong> et votre code d'activation ont été tracés.
-                  </p>
-                </div>
-              )}
-
-              {/* THE ACTUAL DOCUMENT CONTENT */}
-              <div className="relative z-10 flex-1 flex flex-col p-8 md:p-14">
-                
-                {/* Document Header */}
-                <div className={`flex items-center justify-between border-b pb-3 mb-8 text-[10px] font-mono tracking-wider ${activeTheme.muted}`}>
-                  <span>SUPPORT PÉDAGOGIQUE - HALRO MOBILE SCHOOL</span>
-                  <span>ID: {course.id}</span>
-                </div>
-
-                {/* Title & Author Info block */}
-                <div className="mb-8 space-y-3">
-                  <div className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${activeTheme.badge}`}>
-                    <FileText size={10} />
-                    <span>Document / Ouvrage de Cours</span>
-                  </div>
-                  <h1 className={`text-2xl md:text-3xl font-black tracking-tight leading-tight ${activeTheme.headerText}`}>
-                    {course.title}
-                  </h1>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs opacity-80">
-                    <span className="font-semibold">Enseignant : {course.authorName}</span>
-                    <span className="opacity-40">•</span>
-                    <span>Publié le {new Date(course.createdAt).toLocaleDateString("fr-FR")}</span>
-                    <span className="opacity-40">•</span>
-                    <span className={`font-mono text-[10px] px-2 py-0.5 rounded ${activeTheme.metaBg}`}>{course.content.length} caractères</span>
-                  </div>
-                  <hr className={activeTheme.border} />
-                </div>
-
-                {/* Printable-like Text Layout */}
-                <div className="flex-1">
-                  
-                  {/* Render Text content paragraph by paragraph */}
-                  <div className="space-y-4">
-                    {getProcessedParagraphs().map((paragraph, idx) => {
-                      const trimmed = paragraph.trim();
-                      const isHeading = trimmed.startsWith("#");
-                      const headingText = trimmed.replace(/^#+\s*/, "").trim();
-                      const headingLevel = isHeading ? (trimmed.match(/^#+/) || ["#"])[0].length : 0;
-                      const isBullet = trimmed.startsWith("-") || trimmed.startsWith("*") || trimmed.startsWith("•");
-
-                      if (isHeading) {
-                        if (headingLevel === 1) {
-                          return (
-                            <h2 
-                              key={idx} 
-                              className={`book-paragraph text-xl md:text-2xl font-black mt-8 mb-4 border-b pb-2 scroll-mt-24 ${activeTheme.headerText}`}
-                            >
-                              {renderHighlightedContent(headingText)}
-                            </h2>
-                          );
-                        } else if (headingLevel === 2) {
-                          return (
-                            <h3 
-                              key={idx} 
-                              className={`book-paragraph text-lg md:text-xl font-bold mt-6 mb-3 scroll-mt-24 ${activeTheme.headerText}`}
-                            >
-                              {renderHighlightedContent(headingText)}
-                            </h3>
-                          );
-                        } else {
-                          return (
-                            <h4 
-                              key={idx} 
-                              className={`book-paragraph text-base md:text-lg font-bold mt-4 mb-2 scroll-mt-24 ${activeTheme.headerText}`}
-                            >
-                              {renderHighlightedContent(headingText)}
-                            </h4>
-                          );
-                        }
-                      }
-
-                      if (!trimmed) {
-                        return <div key={idx} className="h-2"></div>;
-                      }
-
-                      if (isBullet) {
-                        const cleanBulletText = trimmed.replace(/^[-*•]\s*/, "");
-                        return (
-                          <li 
-                            key={idx} 
-                            className="book-paragraph text-sm md:text-base ml-6 list-disc font-sans text-justify scroll-mt-24 pl-2 my-2"
-                            style={{ 
-                              fontSize: `${fontSize}px`, 
-                              lineHeight: getLineHeightVal(),
-                              color: activeTheme.id === "night" ? "#d0d4d8" : undefined
-                            }}
-                          >
-                            {renderHighlightedContent(cleanBulletText)}
-                          </li>
-                        );
-                      }
-
-                      return (
-                        <p 
-                          key={idx} 
-                          className="book-paragraph text-sm md:text-base font-sans text-justify scroll-mt-24"
-                          style={{ 
-                            fontSize: `${fontSize}px`, 
-                            lineHeight: getLineHeightVal(),
-                            marginBottom: "1.25rem",
-                            textIndent: wpsMode ? "1.5rem" : "0",
-                            color: activeTheme.id === "night" ? "#d0d4d8" : undefined
-                          }}
-                        >
-                          {renderHighlightedContent(paragraph)}
+                    {/* SECURITY VIOLATION OVERLAY (Ctrl+P blocking) */}
+                    {showPrintWarning && (
+                      <div className="fixed inset-0 bg-red-600/95 flex flex-col items-center justify-center text-center p-6 z-[1010] animate-fade-in text-white">
+                        <ShieldAlert size={48} className="text-white mb-3 animate-bounce" />
+                        <h3 className="text-xl font-black">TENTATIVE D'IMPRESSION BLOQUÉE</h3>
+                        <p className="text-sm text-red-100 mt-2 max-w-sm">
+                          L'impression ou l'exportation de ce document est interdite afin de prévenir le partage illicite. 
+                          Votre matricule <strong className="text-white underline">{userMatricule}</strong> et votre code d'activation ont été tracés.
                         </p>
-                      );
-                    })}
+                      </div>
+                    )}
+
+                    {/* PAGE CONTENT */}
+                    <div className="relative z-10 flex-1 flex flex-col p-8 md:p-14 justify-between">
+                      <div>
+                        {/* Page Header */}
+                        <div className={`flex items-center justify-between border-b pb-3 mb-8 text-[10px] font-mono tracking-wider ${activeTheme.muted}`}>
+                          <span>SUPPORT PEDAGOGIQUE - HALRO MOBILE SCHOOL</span>
+                          <span className="font-bold">PAGE {pageIndex + 1} SUR {allPages.length}</span>
+                        </div>
+
+                        {/* Title & Author Info block (Only render on the first page!) */}
+                        {pageIndex === 0 && (
+                          <div className="mb-8 space-y-3">
+                            <div className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${activeTheme.badge}`}>
+                              <FileText size={10} />
+                              <span>Document / Ouvrage de Cours</span>
+                            </div>
+                            <h1 className={`text-2xl md:text-3xl font-black tracking-tight leading-tight ${activeTheme.headerText}`}>
+                              {course.title}
+                            </h1>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs opacity-80">
+                              <span className="font-semibold">Enseignant : {course.authorName}</span>
+                              <span className="opacity-40">•</span>
+                              <span>Publié le {new Date(course.createdAt).toLocaleDateString("fr-FR")}</span>
+                              <span className="opacity-40">•</span>
+                              <span className={`font-mono text-[10px] px-2 py-0.5 rounded ${activeTheme.metaBg}`}>{course.content.length} caractères</span>
+                            </div>
+                            <hr className={activeTheme.border} />
+                          </div>
+                        )}
+
+                        {/* Page Paragraphs */}
+                        <div className="space-y-4">
+                          {pageParagraphs.map((paragraph, idx) => {
+                            const trimmed = paragraph.trim();
+                            const isHeading = trimmed.startsWith("#");
+                            const headingText = trimmed.replace(/^#+\s*/, "").trim();
+                            const headingLevel = isHeading ? (trimmed.match(/^#+/) || ["#"])[0].length : 0;
+                            const isBullet = trimmed.startsWith("-") || trimmed.startsWith("*") || trimmed.startsWith("•");
+
+                            if (isHeading) {
+                              if (headingLevel === 1) {
+                                return (
+                                  <h2 
+                                    key={idx} 
+                                    className={`book-paragraph text-xl md:text-2xl font-black mt-8 mb-4 border-b pb-2 scroll-mt-24 ${activeTheme.headerText}`}
+                                  >
+                                    {renderHighlightedContent(headingText)}
+                                  </h2>
+                                );
+                              } else if (headingLevel === 2) {
+                                return (
+                                  <h3 
+                                    key={idx} 
+                                    className={`book-paragraph text-lg md:text-xl font-bold mt-6 mb-3 scroll-mt-24 ${activeTheme.headerText}`}
+                                  >
+                                    {renderHighlightedContent(headingText)}
+                                  </h3>
+                                );
+                              } else {
+                                return (
+                                  <h4 
+                                    key={idx} 
+                                    className={`book-paragraph text-base md:text-lg font-bold mt-4 mb-2 scroll-mt-24 ${activeTheme.headerText}`}
+                                  >
+                                    {renderHighlightedContent(headingText)}
+                                  </h4>
+                                );
+                              }
+                            }
+
+                            if (!trimmed) {
+                              return <div key={idx} className="h-2"></div>;
+                            }
+
+                            if (isBullet) {
+                              const cleanBulletText = trimmed.replace(/^[-*•]\s*/, "");
+                              return (
+                                <li 
+                                  key={idx} 
+                                  className="book-paragraph text-sm md:text-base ml-6 list-disc font-sans text-justify scroll-mt-24 pl-2 my-2"
+                                  style={{ 
+                                    fontSize: `${fontSize}px`, 
+                                    lineHeight: getLineHeightVal(),
+                                    color: activeTheme.id === "night" ? "#d0d4d8" : undefined
+                                  }}
+                                >
+                                  {renderHighlightedContent(cleanBulletText)}
+                                </li>
+                              );
+                            }
+
+                            return (
+                              <p 
+                                key={idx} 
+                                className="book-paragraph text-sm md:text-base font-sans text-justify scroll-mt-24"
+                                style={{ 
+                                  fontSize: `${fontSize}px`, 
+                                  lineHeight: getLineHeightVal(),
+                                  marginBottom: "1.25rem",
+                                  textIndent: wpsMode ? "1.5rem" : "0",
+                                  color: activeTheme.id === "night" ? "#d0d4d8" : undefined
+                                }}
+                              >
+                                {renderHighlightedContent(paragraph)}
+                              </p>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Document Footer */}
+                      <div className={`flex items-center justify-between border-t pt-4 mt-12 text-[10px] font-mono ${activeTheme.muted}`}>
+                        <span>HALRO MOBILE SCHOOL</span>
+                        <span className="font-bold">Page {pageIndex + 1} / {allPages.length}</span>
+                      </div>
+                    </div>
+
+                    {/* Static Trace Security warning footer inside Page */}
+                    {!isSuperAdmin ? (
+                      <div className={`relative z-10 p-2 text-center text-[9px] tracking-wider font-mono font-semibold ${
+                        activeTheme.id === "night" 
+                          ? "bg-red-950/20 border-t border-red-900/40 text-red-400" 
+                          : "bg-red-50 border-t border-red-100 text-red-600"
+                      }`}>
+                        SÉCURISÉ PAR FILIGRANE INDÉLÉBILE • LICENCIÉ À : {studentInfo} • TOUTE COPIE S'EXPOSE À DES SANCTIONS
+                      </div>
+                    ) : (
+                      <div className={`relative z-10 p-2 text-center text-[9px] tracking-wider font-mono font-semibold ${
+                        activeTheme.id === "night"
+                          ? "bg-[#181a1b] border-t border-[#2d3033] text-slate-500"
+                          : "bg-slate-50 border-t border-slate-100 text-slate-500"
+                      }`}>
+                        ESPACE DE LECTURE ADMINISTRATEUR • IMPRESSION AUTORISÉE
+                      </div>
+                    )}
+
                   </div>
-
-                </div>
-
-                {/* Document Footer */}
-                <div className={`flex items-center justify-between border-t pt-4 mt-12 text-[10px] font-mono ${activeTheme.muted}`}>
-                  <span>HALRO MOBILE SCHOOL</span>
-                  <span className="font-bold">Fin de l'ouvrage</span>
-                </div>
-
-              </div>
-
-              {/* Static Trace Security warning footer inside Page */}
-              {!isSuperAdmin ? (
-                <div className={`relative z-10 p-2 text-center text-[9px] tracking-wider font-mono font-semibold ${
-                  activeTheme.id === "night" 
-                    ? "bg-red-950/20 border-t border-red-900/40 text-red-400" 
-                    : "bg-red-50 border-t border-red-100 text-red-600"
-                }`}>
-                  SÉCURISÉ PAR FILIGRANE INDÉLÉBILE • LICENCIÉ À : {studentInfo} • TOUTE COPIE S'EXPOSE À DES SANCTIONS
-                </div>
-              ) : (
-                <div className={`relative z-10 p-2 text-center text-[9px] tracking-wider font-mono font-semibold ${
-                  activeTheme.id === "night"
-                    ? "bg-[#181a1b] border-t border-[#2d3033] text-slate-500"
-                    : "bg-slate-50 border-t border-slate-100 text-slate-500"
-                }`}>
-                  ESPACE DE LECTURE ADMINISTRATEUR • IMPRESSION AUTORISÉE
-                </div>
-              )}
-
+                );
+              })}
             </div>
-          </div>
           )}
         </div>
 
