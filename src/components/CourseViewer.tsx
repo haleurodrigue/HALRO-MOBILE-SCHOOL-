@@ -877,6 +877,25 @@ export default function CourseViewer({
                       </div>
                     )}
 
+                    {/* Static Trace Security warning note inside Page (Top) */}
+                    {!isSuperAdmin ? (
+                      <div className={`relative z-10 p-2 text-center text-[9px] tracking-wider font-mono font-semibold border-b ${
+                        activeTheme.id === "night" 
+                          ? "bg-red-950/20 border-red-900/40 text-red-400" 
+                          : "bg-red-50 border-red-100 text-red-600"
+                      }`}>
+                        SÉCURISÉ PAR FILIGRANE INDÉLÉBILE • LICENCIÉ À : {studentInfo} • TOUTE COPIE S'EXPOSE À DES SANCTIONS
+                      </div>
+                    ) : (
+                      <div className={`relative z-10 p-2 text-center text-[9px] tracking-wider font-mono font-semibold border-b ${
+                        activeTheme.id === "night"
+                          ? "bg-[#181a1b] border-[#2d3033] text-slate-500"
+                          : "bg-slate-50 border-slate-100 text-slate-500"
+                      }`}>
+                        ESPACE DE LECTURE ADMINISTRATEUR • IMPRESSION AUTORISÉE
+                      </div>
+                    )}
+
                     {/* PAGE CONTENT */}
                     <div className="relative z-10 flex-1 flex flex-col p-8 md:p-14 justify-between">
                       <div>
@@ -1006,24 +1025,7 @@ export default function CourseViewer({
                       </div>
                     </div>
 
-                    {/* Static Trace Security warning footer inside Page */}
-                    {!isSuperAdmin ? (
-                      <div className={`relative z-10 p-2 text-center text-[9px] tracking-wider font-mono font-semibold ${
-                        activeTheme.id === "night" 
-                          ? "bg-red-950/20 border-t border-red-900/40 text-red-400" 
-                          : "bg-red-50 border-t border-red-100 text-red-600"
-                      }`}>
-                        SÉCURISÉ PAR FILIGRANE INDÉLÉBILE • LICENCIÉ À : {studentInfo} • TOUTE COPIE S'EXPOSE À DES SANCTIONS
-                      </div>
-                    ) : (
-                      <div className={`relative z-10 p-2 text-center text-[9px] tracking-wider font-mono font-semibold ${
-                        activeTheme.id === "night"
-                          ? "bg-[#181a1b] border-t border-[#2d3033] text-slate-500"
-                          : "bg-slate-50 border-t border-slate-100 text-slate-500"
-                      }`}>
-                        ESPACE DE LECTURE ADMINISTRATEUR • IMPRESSION AUTORISÉE
-                      </div>
-                    )}
+                    {/* Note de filigrane déplacée en haut de page */}
 
                   </div>
                 );
