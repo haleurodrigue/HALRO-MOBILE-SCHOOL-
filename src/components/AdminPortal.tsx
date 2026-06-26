@@ -104,6 +104,62 @@ const readTextFile = (file: File): Promise<string> => {
   });
 };
 
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = error => reject(error);
+    reader.readAsDataURL(file);
+  });
+};
+
+const processUploadedFile = async (file: File): Promise<string> => {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  
+  if (extension === "pdf") {
+    const text = await extractPdfPagesText(file);
+    const base64 = await fileToBase64(file);
+    return JSON.stringify({
+      isRichContent: true,
+      contentType: "pdf",
+      pdfBase64: base64,
+      text: text
+    });
+  } else if (extension === "docx") {
+    const text = await extractDocxPagesText(file);
+    const arrayBuffer = await file.arrayBuffer();
+    const mammoth = await loadMammoth();
+    const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
+    return JSON.stringify({
+      isRichContent: true,
+      contentType: "docx",
+      html: htmlResult.value,
+      text: text
+    });
+  } else if (extension === "txt") {
+    const text = await readTextFile(file);
+    return JSON.stringify({
+      isRichContent: true,
+      contentType: "text",
+      text: text
+    });
+  } else {
+    throw new Error("Format non supporté. Veuillez importer un fichier PDF, Word (.docx) ou Texte (.txt).");
+  }
+};
+
+const getCourseSizeDisplay = (content: string) => {
+  if (content && content.startsWith('{"isRichContent"')) {
+    try {
+      const data = JSON.parse(content);
+      if (data.contentType === "pdf") return "PDF (Haute Fidélité)";
+      if (data.contentType === "docx") return "Word (Riche)";
+      return "Texte";
+    } catch (e) {}
+  }
+  return `${Math.ceil((content || "").length / 1000)} page(s)`;
+};
+
 interface AdminPortalProps {
   classes: Class[];
   courses: Course[];
@@ -213,20 +269,8 @@ export default function AdminPortal({
     setAdminCourseFileLoading(true);
 
     try {
-      const extension = file.name.split(".").pop()?.toLowerCase();
-      let pages = "";
-
-      if (extension === "pdf") {
-        pages = await extractPdfPagesText(file);
-      } else if (extension === "docx") {
-        pages = await extractDocxPagesText(file);
-      } else if (extension === "txt") {
-        pages = await readTextFile(file);
-      } else {
-        throw new Error("Format non supporté. Veuillez importer un fichier PDF, Word (.docx) ou Texte (.txt).");
-      }
-
-      setAdminCourseContent(pages);
+      const richContent = await processUploadedFile(file);
+      setAdminCourseContent(richContent);
       
       // Auto-set course title from file name if empty
       if (!adminCourseTitle) {
@@ -1422,7 +1466,7 @@ export default function AdminPortal({
                                 <span className="text-emerald-400 font-bold">{course.authorName} ({course.authorId})</span>
                               )}
                             </td>
-                            <td className="py-3 font-mono text-slate-300">{course.content.length} page(s)</td>
+                            <td className="py-3 font-mono text-slate-300">{getCourseSizeDisplay(course.content)}</td>
                             <td className="py-3 text-right space-x-2">
                               <button
                                 onClick={() => setViewedCourse(course)}

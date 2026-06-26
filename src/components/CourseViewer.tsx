@@ -13,6 +13,141 @@ import {
 import { Course } from "../types";
 import { jsPDF } from "jspdf";
 
+const loadPdfJSInViewer = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    if ((window as any).pdfjsLib) {
+      resolve((window as any).pdfjsLib);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js";
+    script.onload = () => {
+      const pdfjsLib = (window as any).pdfjsLib;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+      resolve(pdfjsLib);
+    };
+    script.onerror = () => reject(new Error("Impossible de charger PDF.js"));
+    document.body.appendChild(script);
+  });
+};
+
+const loadKaTeX = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    if ((window as any).katex) {
+      resolve((window as any).katex);
+      return;
+    }
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css";
+    document.head.appendChild(link);
+
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.js";
+    script.onload = () => {
+      const renderScript = document.createElement("script");
+      renderScript.src = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/contrib/auto-render.min.js";
+      renderScript.onload = () => {
+        resolve((window as any).katex);
+      };
+      document.body.appendChild(renderScript);
+    };
+    script.onerror = () => reject(new Error("KaTeX load failed"));
+    document.body.appendChild(script);
+  });
+};
+
+interface PdfPageCanvasProps {
+  pdfDoc: any;
+  pageNumber: number;
+  zoomLevel: number;
+  activeTheme: any;
+}
+
+const PdfPageCanvas: React.FC<PdfPageCanvasProps> = ({ pdfDoc, pageNumber, zoomLevel, activeTheme }) => {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [renderError, setRenderError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    let renderTask: any = null;
+
+    if (!pdfDoc) return;
+
+    setLoading(true);
+    setRenderError(false);
+
+    pdfDoc.getPage(pageNumber).then((page: any) => {
+      if (!active) return;
+
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const context = canvas.getContext("2d");
+      if (!context) return;
+
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport,
+      };
+
+      renderTask = page.render(renderContext);
+      renderTask.promise.then(() => {
+        if (active) {
+          setLoading(false);
+        }
+      }).catch((err: any) => {
+        console.error("PDF page render error:", err);
+        if (active) {
+          setRenderError(true);
+          setLoading(false);
+        }
+      });
+    }).catch((err: any) => {
+      console.error("Error getting PDF page:", err);
+      if (active) {
+        setRenderError(true);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      active = false;
+      if (renderTask && renderTask.cancel) {
+        renderTask.cancel();
+      }
+    };
+  }, [pdfDoc, pageNumber]);
+
+  return (
+    <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+      {loading && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/10 backdrop-blur-xs z-10">
+          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-[10px] font-mono text-slate-400 mt-2">Chargement de la page {pageNumber}...</p>
+        </div>
+      )}
+      {renderError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center z-10">
+          <p className="text-xs text-red-500 font-bold">Erreur de rendu de la page {pageNumber}</p>
+        </div>
+      )}
+      <canvas 
+        ref={canvasRef} 
+        className="w-full h-auto max-w-full block"
+        style={{
+          filter: activeTheme.id === "night" ? "invert(0.9) hue-rotate(180deg)" : "none"
+        }}
+      />
+    </div>
+  );
+};
+
 interface CourseViewerProps {
   course: Course;
   userMatricule: string;
@@ -80,10 +215,10 @@ export default function CourseViewer({
   const [showWatermarkSettings, setShowWatermarkSettings] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   
-  // Customizable Watermark options for students
+  // Customizable Watermark options for students (Default color is gray now)
   const [watermarkStyle, setWatermarkStyle] = useState<"diagonal" | "grid" | "split">("diagonal");
   const [watermarkOpacity, setWatermarkOpacity] = useState<number>(8); // percentage: 4%, 8%, 12%, 16%, 20%
-  const [watermarkColor, setWatermarkColor] = useState<"red" | "indigo" | "gray" | "emerald">("red");
+  const [watermarkColor, setWatermarkColor] = useState<"red" | "indigo" | "gray" | "emerald">("gray");
   const [watermarkCustomText, setWatermarkCustomText] = useState<string>("");
 
   // WPS Reflow & Intelligent Reader Options (WPS Mode is enabled by default)
@@ -92,6 +227,81 @@ export default function CourseViewer({
   const [fontSize, setFontSize] = useState<number>(15);
   const [lineHeightStyle, setLineHeightStyle] = useState<"tight" | "normal" | "loose">("normal");
   const [showWpsSettings, setShowWpsSettings] = useState<boolean>(false);
+
+  // Parse rich content JSON structure
+  const isRich = course.content && course.content.trim().startsWith('{"isRichContent"');
+  let richData: any = null;
+  if (isRich) {
+    try {
+      richData = JSON.parse(course.content);
+    } catch (e) {}
+  }
+
+  // Rich Content (PDF) States
+  const [pdfDoc, setPdfDoc] = useState<any>(null);
+  const [pdfPageCount, setPdfPageCount] = useState<number>(0);
+  const [pdfLoading, setPdfLoading] = useState<boolean>(false);
+  const [pdfError, setPdfError] = useState<string>("");
+
+  // Dynamic PDF.js Document Loader
+  useEffect(() => {
+    if (isRich && richData && richData.contentType === "pdf") {
+      setPdfLoading(true);
+      setPdfError("");
+      loadPdfJSInViewer().then((pdfjsLib) => {
+        try {
+          const base64Str = richData.pdfBase64.split(",")[1];
+          const binaryString = window.atob(base64Str);
+          const len = binaryString.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          
+          pdfjsLib.getDocument({ data: bytes }).promise.then((pdf: any) => {
+            setPdfDoc(pdf);
+            setPdfPageCount(pdf.numPages);
+            setPdfLoading(false);
+          }).catch((err: any) => {
+            console.error("Error loading PDF document content:", err);
+            setPdfError("Erreur lors de la lecture des pages du PDF.");
+            setPdfLoading(false);
+          });
+        } catch (e) {
+          console.error("Error decoding base64 PDF:", e);
+          setPdfError("Données de fichier PDF corrompues ou invalides.");
+          setPdfLoading(false);
+        }
+      }).catch((err: any) => {
+        console.error("Error loading PDF.js engine:", err);
+        setPdfError("Moteur de rendu PDF indisponible.");
+        setPdfLoading(false);
+      });
+    } else {
+      setPdfDoc(null);
+      setPdfPageCount(0);
+    }
+  }, [course.id, isRich]);
+
+  // KaTeX Auto-render math equations hook
+  useEffect(() => {
+    loadKaTeX().then(() => {
+      const container = document.getElementById("course-viewer-container");
+      if (container && (window as any).renderMathInElement) {
+        (window as any).renderMathInElement(container, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
+            { left: "\\(", right: "\\)", display: false },
+            { left: "\\[", right: "\\]", display: true }
+          ],
+          throwOnError: false
+        });
+      }
+    }).catch((err) => {
+      console.warn("KaTeX skipped or not loaded:", err);
+    });
+  }, [course.id, readingTheme, wpsMode, zoomLevel, pdfPageCount]);
 
   // Disable copy-paste, print screen events, and right click
   useEffect(() => {
@@ -214,11 +424,11 @@ export default function CourseViewer({
     const opacity = watermarkOpacity / 100;
 
     if (watermarkStyle === "diagonal") {
-      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><text x="30" y="180" font-family="'Inter', sans-serif" font-size="10" font-weight="bold" fill="${color}" fill-opacity="${opacity}" transform="rotate(-28, 30, 180)">${escapedText}</text></svg>`;
+      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="180" height="130"><text x="10" y="75" font-family="'Inter', sans-serif" font-size="7.5" font-weight="bold" fill="${color}" fill-opacity="${opacity}" transform="rotate(-28, 10, 75)">${escapedText}</text></svg>`;
     } else if (watermarkStyle === "grid") {
-      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150"><text x="10" y="60" font-family="'Inter', sans-serif" font-size="8" font-weight="extrabold" fill="${color}" fill-opacity="${opacity}" transform="rotate(-15, 10, 60)">HALRO MOBILE SCHOOL</text><text x="10" y="80" font-family="'Inter', sans-serif" font-size="8" font-weight="bold" fill="${color}" fill-opacity="${opacity}" transform="rotate(-15, 10, 80)">${studentInfo}</text></svg>`;
+      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120"><text x="10" y="50" font-family="'Inter', sans-serif" font-size="7" font-weight="extrabold" fill="${color}" fill-opacity="${opacity}" transform="rotate(-15, 10, 50)">HALRO MOBILE SCHOOL</text><text x="10" y="65" font-family="'Inter', sans-serif" font-size="7" font-weight="bold" fill="${color}" fill-opacity="${opacity}" transform="rotate(-15, 10, 65)">${studentInfo}</text></svg>`;
     } else {
-      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="500" height="400"><text x="20" y="30" font-family="monospace" font-size="8" fill="${color}" fill-opacity="${opacity}">HALRO MOBILE SCHOOL • ÉLÈVE : ${studentInfo}</text><text x="20" y="380" font-family="monospace" font-size="8" fill="${color}" fill-opacity="${opacity}">COPIE INTERDITE • TRACÉ DE SÉCURITÉ</text></svg>`;
+      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><text x="15" y="25" font-family="monospace" font-size="7" fill="${color}" fill-opacity="${opacity}">HALRO MOBILE SCHOOL • ÉLÈVE : ${studentInfo}</text><text x="15" y="280" font-family="monospace" font-size="7" fill="${color}" fill-opacity="${opacity}">COPIE INTERDITE • TRACÉ DE SÉCURITÉ</text></svg>`;
     }
   };
 
@@ -306,12 +516,14 @@ export default function CourseViewer({
     return "1.65"; // normal
   };
 
+  const textContent = (isRich && richData) ? (richData.text || "") : (course.content || "");
+
   const getProcessedParagraphs = () => {
     if (!wpsMode) {
-      return course.content.split("\n");
+      return textContent.split("\n");
     }
 
-    const lines = course.content.split("\n");
+    const lines = textContent.split("\n");
     const result: string[] = [];
     let currentParagraph = "";
 
@@ -372,6 +584,19 @@ export default function CourseViewer({
   };
 
   const getPages = () => {
+    // If rich PDF document and not in WPS Reflow mode, return canvas representations
+    if (isRich && richData && richData.contentType === "pdf" && !wpsMode) {
+      if (pdfPageCount > 0) {
+        return Array.from({ length: pdfPageCount }, (_, i) => [`__pdf_page_${i + 1}__`]);
+      }
+      return [["__pdf_page_loading__"]];
+    }
+
+    // If rich DOCX document and not in WPS Reflow mode, return single HTML wrapper
+    if (isRich && richData && richData.contentType === "docx" && !wpsMode) {
+      return [["__docx_html_content__"]];
+    }
+
     const paragraphs = getProcessedParagraphs();
     const pages: string[][] = [];
     let currentPage: string[] = [];
@@ -422,7 +647,7 @@ export default function CourseViewer({
 
   // Parse sections for Table of Contents
   const getTableOfContents = () => {
-    const lines = course.content.split("\n");
+    const lines = textContent.split("\n");
     const sections: { id: string; title: string; lineIndex: number; level: number }[] = [];
     let sectionCount = 0;
 
@@ -897,132 +1122,272 @@ export default function CourseViewer({
                     )}
 
                     {/* PAGE CONTENT */}
-                    <div className="relative z-10 flex-1 flex flex-col p-8 md:p-14 justify-between">
-                      <div>
-                        {/* Page Header */}
-                        <div className={`flex items-center justify-between border-b pb-3 mb-8 text-[10px] font-mono tracking-wider ${activeTheme.muted}`}>
-                          <span>SUPPORT PEDAGOGIQUE - HALRO MOBILE SCHOOL</span>
-                          <span className="font-bold">PAGE {pageIndex + 1} SUR {allPages.length}</span>
-                        </div>
+                    <div className="relative z-10 flex-1 flex flex-col p-8 md:p-14 justify-between h-full">
+                      {(() => {
+                        const firstLine = pageParagraphs[0] || "";
+                        const isPdfPage = firstLine.startsWith("__pdf_page_") && firstLine !== "__pdf_page_loading__";
+                        const isPdfPageNum = isPdfPage ? parseInt(firstLine.replace("__pdf_page_", "").replace("__", ""), 10) : 0;
+                        const isPdfLoading = firstLine === "__pdf_page_loading__";
+                        const isDocxPage = firstLine === "__docx_html_content__";
 
-                        {/* Title & Author Info block (Only render on the first page!) */}
-                        {pageIndex === 0 && (
-                          <div className="mb-8 space-y-3">
-                            <div className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${activeTheme.badge}`}>
-                              <FileText size={10} />
-                              <span>Document / Ouvrage de Cours</span>
+                        if (isPdfPage) {
+                          return (
+                            <div className="flex-1 flex flex-col h-full w-full justify-between">
+                              <div>
+                                {/* Page Header */}
+                                <div className={`flex items-center justify-between border-b pb-3 mb-4 text-[10px] font-mono tracking-wider ${activeTheme.muted}`}>
+                                  <span>SUPPORT PEDAGOGIQUE - HALRO MOBILE SCHOOL</span>
+                                  <span className="font-bold">PAGE {isPdfPageNum} SUR {allPages.length}</span>
+                                </div>
+                                
+                                {/* PDF Canvas Render */}
+                                <div className="flex-1 flex items-center justify-center w-full min-h-[500px] overflow-hidden">
+                                  {pdfDoc ? (
+                                    <PdfPageCanvas 
+                                      pdfDoc={pdfDoc} 
+                                      pageNumber={isPdfPageNum} 
+                                      zoomLevel={zoomLevel} 
+                                      activeTheme={activeTheme} 
+                                    />
+                                  ) : (
+                                    <div className="flex flex-col items-center justify-center py-32 text-slate-400">
+                                      <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                                      <p className="text-xs font-mono mt-2">Chargement du PDF...</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Document Footer */}
+                              <div className={`flex items-center justify-between border-t pt-4 mt-6 text-[10px] font-mono ${activeTheme.muted}`}>
+                                <span>HALRO MOBILE SCHOOL</span>
+                                <span className="font-bold">Page {isPdfPageNum} / {allPages.length}</span>
+                              </div>
                             </div>
-                            <h1 className={`text-2xl md:text-3xl font-black tracking-tight leading-tight ${activeTheme.headerText}`}>
-                              {course.title}
-                            </h1>
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs opacity-80">
-                              <span className="font-semibold">Enseignant : {course.authorName}</span>
-                              <span className="opacity-40">•</span>
-                              <span>Publié le {new Date(course.createdAt).toLocaleDateString("fr-FR")}</span>
-                              <span className="opacity-40">•</span>
-                              <span className={`font-mono text-[10px] px-2 py-0.5 rounded ${activeTheme.metaBg}`}>{course.content.length} caractères</span>
+                          );
+                        }
+
+                        if (isPdfLoading) {
+                          return (
+                            <div className="flex-1 flex flex-col h-full w-full justify-center items-center py-32 text-slate-400">
+                              <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                              <p className="text-xs font-mono mt-2 text-center">Initialisation du moteur de rendu PDF...</p>
+                              {pdfError && <p className="text-xs text-red-500 font-bold mt-2 text-center">{pdfError}</p>}
                             </div>
-                            <hr className={activeTheme.border} />
-                          </div>
-                        )}
+                          );
+                        }
 
-                        {/* Page Paragraphs */}
-                        <div className="space-y-4">
-                          {pageParagraphs.map((paragraph, idx) => {
-                            const trimmed = paragraph.trim();
-                            const isHeading = trimmed.startsWith("#");
-                            const headingText = trimmed.replace(/^#+\s*/, "").trim();
-                            const headingLevel = isHeading ? (trimmed.match(/^#+/) || ["#"])[0].length : 0;
-                            const isBullet = trimmed.startsWith("-") || trimmed.startsWith("*") || trimmed.startsWith("•");
+                        if (isDocxPage) {
+                          return (
+                            <div className="flex-1 flex flex-col h-full w-full justify-between">
+                              <div>
+                                {/* Page Header */}
+                                <div className={`flex items-center justify-between border-b pb-3 mb-6 text-[10px] font-mono tracking-wider ${activeTheme.muted}`}>
+                                  <span>SUPPORT PEDAGOGIQUE - HALRO MOBILE SCHOOL</span>
+                                  <span className="font-bold">DOCUMENT DE COURS INTEGRAL</span>
+                                </div>
 
-                            if (isHeading) {
-                              if (headingLevel === 1) {
-                                return (
-                                  <h2 
-                                    key={idx} 
-                                    className={`book-paragraph text-xl md:text-2xl font-black mt-8 mb-4 border-b pb-2 text-center scroll-mt-24 ${activeTheme.headerText}`}
-                                  >
-                                    {renderHighlightedContent(headingText)}
-                                  </h2>
-                                );
-                              } else if (headingLevel === 2) {
-                                return (
-                                  <h3 
-                                    key={idx} 
-                                    className={`book-paragraph text-lg md:text-xl font-bold mt-6 mb-3 text-center scroll-mt-24 ${activeTheme.headerText}`}
-                                  >
-                                    {renderHighlightedContent(headingText)}
-                                  </h3>
-                                );
-                              } else {
-                                return (
-                                  <h4 
-                                    key={idx} 
-                                    className={`book-paragraph text-base md:text-lg font-bold mt-4 mb-2 text-center scroll-mt-24 ${activeTheme.headerText}`}
-                                  >
-                                    {renderHighlightedContent(headingText)}
-                                  </h4>
-                                );
-                              }
-                            }
+                                {/* Title & Author Info block */}
+                                <div className="mb-6 space-y-3">
+                                  <div className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${activeTheme.badge}`}>
+                                    <FileText size={10} />
+                                    <span>Support de Cours Word (Riche)</span>
+                                  </div>
+                                  <h1 className={`text-2xl md:text-3xl font-black tracking-tight leading-tight ${activeTheme.headerText}`}>
+                                    {course.title}
+                                  </h1>
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs opacity-80">
+                                    <span className="font-semibold">Enseignant : {course.authorName}</span>
+                                    <span className="opacity-40">•</span>
+                                    <span>Publié le {new Date(course.createdAt).toLocaleDateString("fr-FR")}</span>
+                                  </div>
+                                  <hr className={activeTheme.border} />
+                                </div>
 
-                            if (!trimmed) {
-                              return <div key={idx} className="h-2"></div>;
-                            }
+                                <style>{`
+                                  .rich-html-content table {
+                                    width: 100% !important;
+                                    border-collapse: collapse !important;
+                                    margin: 1.5rem 0 !important;
+                                  }
+                                  .rich-html-content th, .rich-html-content td {
+                                    border: 1px solid ${activeTheme.id === 'night' ? '#475569' : '#cbd5e1'} !important;
+                                    padding: 0.6rem 0.8rem !important;
+                                    text-align: left !important;
+                                  }
+                                  .rich-html-content th {
+                                    background-color: ${activeTheme.id === 'night' ? '#1e293b' : '#f8fafc'} !important;
+                                    font-weight: 600 !important;
+                                  }
+                                  .rich-html-content img {
+                                    max-width: 100% !important;
+                                    height: auto !important;
+                                    border-radius: 0.5rem !important;
+                                    margin: 1.5rem auto !important;
+                                    display: block !important;
+                                  }
+                                  .rich-html-content p {
+                                    margin-bottom: 1rem !important;
+                                  }
+                                  .rich-html-content ul, .rich-html-content ol {
+                                    margin: 1rem 0 !important;
+                                    padding-left: 1.5rem !important;
+                                  }
+                                  .rich-html-content li {
+                                    margin-bottom: 0.5rem !important;
+                                  }
+                                `}</style>
 
-                            if (isBullet) {
-                              const cleanBulletText = trimmed.replace(/^[-*•]\s*/, "");
-                              return (
-                                <li 
-                                  key={idx} 
-                                  className="book-paragraph text-sm md:text-base ml-6 list-disc font-sans text-justify scroll-mt-24 pl-2 my-2"
-                                  style={{ 
-                                    fontSize: `${fontSize}px`, 
+                                <div 
+                                  className="rich-html-content text-left w-full select-none"
+                                  style={{
+                                    fontSize: `${fontSize}px`,
                                     lineHeight: getLineHeightVal(),
-                                    color: activeTheme.id === "night" ? "#d0d4d8" : undefined,
-                                    textJustify: "inter-word",
-                                    WebkitTextJustify: "inter-word",
-                                    hyphens: "auto",
-                                    WebkitHyphens: "auto",
-                                    msHyphens: "auto",
-                                    wordBreak: "break-word"
+                                    color: activeTheme.id === "night" ? "#d0d4d8" : undefined
                                   }}
-                                >
-                                  {renderHighlightedContent(cleanBulletText)}
-                                </li>
-                              );
-                            }
+                                  dangerouslySetInnerHTML={{ __html: richData.html }}
+                                />
+                              </div>
 
-                            return (
-                              <p 
-                                key={idx} 
-                                className="book-paragraph text-sm md:text-base font-sans text-justify scroll-mt-24"
-                                style={{ 
-                                  fontSize: `${fontSize}px`, 
-                                  lineHeight: getLineHeightVal(),
-                                  marginBottom: "1.25rem",
-                                  textIndent: wpsMode ? "1.5rem" : "0",
-                                  color: activeTheme.id === "night" ? "#d0d4d8" : undefined,
-                                  textJustify: "inter-word",
-                                  WebkitTextJustify: "inter-word",
-                                  hyphens: "auto",
-                                  WebkitHyphens: "auto",
-                                  msHyphens: "auto",
-                                  wordBreak: "break-word"
-                                }}
-                              >
-                                {renderHighlightedContent(paragraph)}
-                              </p>
-                            );
-                          })}
-                        </div>
-                      </div>
+                              {/* Document Footer */}
+                              <div className={`flex items-center justify-between border-t pt-4 mt-12 text-[10px] font-mono ${activeTheme.muted}`}>
+                                <span>HALRO MOBILE SCHOOL</span>
+                                <span className="font-bold">Page 1 / 1</span>
+                              </div>
+                            </div>
+                          );
+                        }
 
-                      {/* Document Footer */}
-                      <div className={`flex items-center justify-between border-t pt-4 mt-12 text-[10px] font-mono ${activeTheme.muted}`}>
-                        <span>HALRO MOBILE SCHOOL</span>
-                        <span className="font-bold">Page {pageIndex + 1} / {allPages.length}</span>
-                      </div>
+                        return (
+                          <div className="flex-1 flex flex-col justify-between h-full">
+                            <div>
+                              {/* Page Header */}
+                              <div className={`flex items-center justify-between border-b pb-3 mb-8 text-[10px] font-mono tracking-wider ${activeTheme.muted}`}>
+                                <span>SUPPORT PEDAGOGIQUE - HALRO MOBILE SCHOOL</span>
+                                <span className="font-bold">PAGE {pageIndex + 1} SUR {allPages.length}</span>
+                              </div>
+
+                              {/* Title & Author Info block (Only render on the first page!) */}
+                              {pageIndex === 0 && (
+                                <div className="mb-8 space-y-3">
+                                  <div className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${activeTheme.badge}`}>
+                                    <FileText size={10} />
+                                    <span>Document / Ouvrage de Cours</span>
+                                  </div>
+                                  <h1 className={`text-2xl md:text-3xl font-black tracking-tight leading-tight ${activeTheme.headerText}`}>
+                                    {course.title}
+                                  </h1>
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs opacity-80">
+                                    <span className="font-semibold">Enseignant : {course.authorName}</span>
+                                    <span className="opacity-40">•</span>
+                                    <span>Publié le {new Date(course.createdAt).toLocaleDateString("fr-FR")}</span>
+                                    <span className="opacity-40">•</span>
+                                    <span className={`font-mono text-[10px] px-2 py-0.5 rounded ${activeTheme.metaBg}`}>{textContent.length} caractères</span>
+                                  </div>
+                                  <hr className={activeTheme.border} />
+                                </div>
+                              )}
+
+                              {/* Page Paragraphs */}
+                              <div className="space-y-4">
+                                {pageParagraphs.map((paragraph, idx) => {
+                                  const trimmed = paragraph.trim();
+                                  const isHeading = trimmed.startsWith("#");
+                                  const headingText = trimmed.replace(/^#+\s*/, "").trim();
+                                  const headingLevel = isHeading ? (trimmed.match(/^#+/) || ["#"])[0].length : 0;
+                                  const isBullet = trimmed.startsWith("-") || trimmed.startsWith("*") || trimmed.startsWith("•");
+
+                                  if (isHeading) {
+                                    if (headingLevel === 1) {
+                                      return (
+                                        <h2 
+                                          key={idx} 
+                                          className={`book-paragraph text-xl md:text-2xl font-black mt-8 mb-4 border-b pb-2 text-center scroll-mt-24 ${activeTheme.headerText}`}
+                                        >
+                                          {renderHighlightedContent(headingText)}
+                                        </h2>
+                                      );
+                                    } else if (headingLevel === 2) {
+                                      return (
+                                        <h3 
+                                          key={idx} 
+                                          className={`book-paragraph text-lg md:text-xl font-bold mt-6 mb-3 text-center scroll-mt-24 ${activeTheme.headerText}`}
+                                        >
+                                          {renderHighlightedContent(headingText)}
+                                        </h3>
+                                      );
+                                    } else {
+                                      return (
+                                        <h4 
+                                          key={idx} 
+                                          className={`book-paragraph text-base md:text-lg font-bold mt-4 mb-2 text-center scroll-mt-24 ${activeTheme.headerText}`}
+                                        >
+                                          {renderHighlightedContent(headingText)}
+                                        </h4>
+                                      );
+                                    }
+                                  }
+
+                                  if (!trimmed) {
+                                    return <div key={idx} className="h-2"></div>;
+                                  }
+
+                                  if (isBullet) {
+                                    const cleanBulletText = trimmed.replace(/^[-*•]\s*/, "");
+                                    return (
+                                      <li 
+                                        key={idx} 
+                                        className="book-paragraph text-sm md:text-base ml-6 list-disc font-sans text-justify scroll-mt-24 pl-2 my-2"
+                                        style={{ 
+                                          fontSize: `${fontSize}px`, 
+                                          lineHeight: getLineHeightVal(),
+                                          color: activeTheme.id === "night" ? "#d0d4d8" : undefined,
+                                          textJustify: "inter-word",
+                                          WebkitTextJustify: "inter-word",
+                                          hyphens: "auto",
+                                          WebkitHyphens: "auto",
+                                          msHyphens: "auto",
+                                          wordBreak: "break-word"
+                                        }}
+                                      >
+                                        {renderHighlightedContent(cleanBulletText)}
+                                      </li>
+                                    );
+                                  }
+
+                                  return (
+                                    <p 
+                                      key={idx} 
+                                      className="book-paragraph text-sm md:text-base font-sans text-justify scroll-mt-24"
+                                      style={{ 
+                                        fontSize: `${fontSize}px`, 
+                                        lineHeight: getLineHeightVal(),
+                                        marginBottom: "1.25rem",
+                                        textIndent: wpsMode ? "1.5rem" : "0",
+                                        color: activeTheme.id === "night" ? "#d0d4d8" : undefined,
+                                        textJustify: "inter-word",
+                                        WebkitTextJustify: "inter-word",
+                                        hyphens: "auto",
+                                        WebkitHyphens: "auto",
+                                        msHyphens: "auto",
+                                        wordBreak: "break-word"
+                                      }}
+                                    >
+                                      {renderHighlightedContent(paragraph)}
+                                    </p>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Document Footer */}
+                            <div className={`flex items-center justify-between border-t pt-4 mt-12 text-[10px] font-mono ${activeTheme.muted}`}>
+                              <span>HALRO MOBILE SCHOOL</span>
+                              <span className="font-bold">Page {pageIndex + 1} / {allPages.length}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Note de filigrane déplacée en haut de page */}
