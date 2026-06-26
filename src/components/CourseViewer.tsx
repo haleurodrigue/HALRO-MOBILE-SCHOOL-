@@ -714,7 +714,7 @@ export default function CourseViewer({
       </div>
 
       {/* 1. TOP MAIN CONTROL RIBBON */}
-      {showTopRibbon ? (
+      {showTopRibbon && (
         <div className="relative flex flex-wrap items-center justify-between px-4 py-1.5 bg-white border-b border-slate-200 gap-2 z-[1002] shadow-sm pt-2">
           
           {/* Left Side: Back/Exit & Title */}
@@ -851,25 +851,7 @@ export default function CourseViewer({
               </div>
             )}
           </div>
-
-          {/* Collapsible toggle arrow button ↑ */}
-          <button
-            onClick={() => setShowTopRibbon(false)}
-            className="absolute bottom-0 left-6 translate-y-1/2 bg-white border border-slate-200 shadow-md hover:bg-slate-100 text-indigo-600 rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95"
-            title="Masquer le ruban supérieur (Expérience plein écran)"
-          >
-            <ChevronUp size={14} className="stroke-[3]" />
-          </button>
         </div>
-      ) : (
-        /* Expand toggle arrow button ↓ */
-        <button
-          onClick={() => setShowTopRibbon(true)}
-          className="absolute top-3 left-6 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 animate-bounce"
-          title="Afficher le ruban supérieur"
-        >
-          <ChevronDown size={16} className="stroke-[3]" />
-        </button>
       )}
 
       {/* 2. MAIN SPLIT BODY */}
@@ -1424,7 +1406,7 @@ export default function CourseViewer({
       </div>
 
       {/* 4. BOTTOM FOOTER RIBBON */}
-      {showBottomRibbon ? (
+      {showBottomRibbon && (
         <div className="relative flex items-center justify-between px-6 py-4 bg-white border-t border-slate-200 z-[1002]">
           <div className="text-xs text-slate-500 font-bold">
             Progression : <strong className="text-indigo-600 font-black">{readingProgress}%</strong> complété
@@ -1440,26 +1422,43 @@ export default function CourseViewer({
             <ArrowUp size={13} />
             <span>Haut de page</span>
           </button>
-
-          {/* Collapsible toggle arrow button ↓ */}
-          <button
-            onClick={() => setShowBottomRibbon(false)}
-            className="absolute top-0 left-6 -translate-y-1/2 bg-white border border-slate-200 shadow-md hover:bg-slate-100 text-indigo-600 rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95"
-            title="Masquer la barre inférieure (Expérience plein écran)"
-          >
-            <ChevronDown size={14} className="stroke-[3]" />
-          </button>
         </div>
-      ) : (
-        /* Expand toggle arrow button ↑ */
-        <button
-          onClick={() => setShowBottomRibbon(true)}
-          className="absolute bottom-3 left-6 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 animate-bounce"
-          title="Afficher la barre inférieure"
-        >
-          <ChevronUp size={16} className="stroke-[3]" />
-        </button>
       )}
+
+      {/* Global Stable Toggle Buttons for Top and Bottom Ribbons */}
+      {/* Top Ribbon Toggle (Fixed at top-[38px] on the left) */}
+      <button
+        onClick={() => setShowTopRibbon(!showTopRibbon)}
+        className={`absolute top-[38px] left-6 z-[1003] border shadow-md rounded-full p-1.5 transition-all duration-200 flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 ${
+          showTopRibbon 
+            ? "bg-white border-slate-200 text-indigo-600 hover:bg-slate-50" 
+            : "bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500"
+        }`}
+        title={showTopRibbon ? "Masquer le ruban supérieur" : "Afficher le ruban supérieur"}
+      >
+        {showTopRibbon ? (
+          <ChevronUp size={14} className="stroke-[3]" />
+        ) : (
+          <ChevronDown size={14} className="stroke-[3]" />
+        )}
+      </button>
+
+      {/* Bottom Ribbon Toggle (Fixed at bottom-[50px] on the left) */}
+      <button
+        onClick={() => setShowBottomRibbon(!showBottomRibbon)}
+        className={`absolute bottom-[50px] left-6 z-[1003] border shadow-md rounded-full p-1.5 transition-all duration-200 flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 ${
+          showBottomRibbon 
+            ? "bg-white border-slate-200 text-indigo-600 hover:bg-slate-50" 
+            : "bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500"
+        }`}
+        title={showBottomRibbon ? "Masquer la barre inférieure" : "Afficher la barre inférieure"}
+      >
+        {showBottomRibbon ? (
+          <ChevronDown size={14} className="stroke-[3]" />
+        ) : (
+          <ChevronUp size={14} className="stroke-[3]" />
+        )}
+      </button>
 
     </div>
   );
