@@ -960,7 +960,13 @@ export default function CourseViewer({
                                   style={{ 
                                     fontSize: `${fontSize}px`, 
                                     lineHeight: getLineHeightVal(),
-                                    color: activeTheme.id === "night" ? "#d0d4d8" : undefined
+                                    color: activeTheme.id === "night" ? "#d0d4d8" : undefined,
+                                    textJustify: "inter-word",
+                                    WebkitTextJustify: "inter-word",
+                                    hyphens: "auto",
+                                    WebkitHyphens: "auto",
+                                    msHyphens: "auto",
+                                    wordBreak: "break-word"
                                   }}
                                 >
                                   {renderHighlightedContent(cleanBulletText)}
@@ -977,7 +983,13 @@ export default function CourseViewer({
                                   lineHeight: getLineHeightVal(),
                                   marginBottom: "1.25rem",
                                   textIndent: wpsMode ? "1.5rem" : "0",
-                                  color: activeTheme.id === "night" ? "#d0d4d8" : undefined
+                                  color: activeTheme.id === "night" ? "#d0d4d8" : undefined,
+                                  textJustify: "inter-word",
+                                  WebkitTextJustify: "inter-word",
+                                  hyphens: "auto",
+                                  WebkitHyphens: "auto",
+                                  msHyphens: "auto",
+                                  wordBreak: "break-word"
                                 }}
                               >
                                 {renderHighlightedContent(paragraph)}
