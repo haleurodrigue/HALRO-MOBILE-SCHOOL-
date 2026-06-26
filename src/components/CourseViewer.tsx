@@ -855,7 +855,7 @@ export default function CourseViewer({
           {/* Collapsible toggle arrow button ↑ */}
           <button
             onClick={() => setShowTopRibbon(false)}
-            className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 bg-white border border-slate-200 shadow-md hover:bg-slate-100 text-indigo-600 rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95"
+            className="absolute bottom-0 left-6 translate-y-1/2 bg-white border border-slate-200 shadow-md hover:bg-slate-100 text-indigo-600 rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95"
             title="Masquer le ruban supérieur (Expérience plein écran)"
           >
             <ChevronUp size={14} className="stroke-[3]" />
@@ -865,7 +865,7 @@ export default function CourseViewer({
         /* Expand toggle arrow button ↓ */
         <button
           onClick={() => setShowTopRibbon(true)}
-          className="absolute top-2 left-1/2 -translate-x-1/2 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 animate-bounce"
+          className="absolute top-3 left-6 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 animate-bounce"
           title="Afficher le ruban supérieur"
         >
           <ChevronDown size={16} className="stroke-[3]" />
@@ -1444,7 +1444,7 @@ export default function CourseViewer({
           {/* Collapsible toggle arrow button ↓ */}
           <button
             onClick={() => setShowBottomRibbon(false)}
-            className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white border border-slate-200 shadow-md hover:bg-slate-100 text-indigo-600 rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95"
+            className="absolute top-0 left-6 -translate-y-1/2 bg-white border border-slate-200 shadow-md hover:bg-slate-100 text-indigo-600 rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95"
             title="Masquer la barre inférieure (Expérience plein écran)"
           >
             <ChevronDown size={14} className="stroke-[3]" />
@@ -1454,7 +1454,7 @@ export default function CourseViewer({
         /* Expand toggle arrow button ↑ */
         <button
           onClick={() => setShowBottomRibbon(true)}
-          className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 animate-bounce"
+          className="absolute bottom-3 left-6 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 animate-bounce"
           title="Afficher la barre inférieure"
         >
           <ChevronUp size={16} className="stroke-[3]" />
