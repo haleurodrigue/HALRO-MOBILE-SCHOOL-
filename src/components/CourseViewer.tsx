@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from "react";
 import { 
-  ChevronLeft, ChevronRight, Download, Lock, ShieldAlert, 
+  ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Download, Lock, ShieldAlert, 
   AlertTriangle, EyeOff, FileText, ZoomIn, ZoomOut, Sun, Moon, 
   Layers, Settings, Search, Check, Sliders, Eye, X, ArrowUp,
   BookOpen, Palette, Type, Baseline
@@ -227,6 +227,8 @@ export default function CourseViewer({
   const [fontSize, setFontSize] = useState<number>(15);
   const [lineHeightStyle, setLineHeightStyle] = useState<"tight" | "normal" | "loose">("normal");
   const [showWpsSettings, setShowWpsSettings] = useState<boolean>(false);
+  const [showTopRibbon, setShowTopRibbon] = useState<boolean>(true);
+  const [showBottomRibbon, setShowBottomRibbon] = useState<boolean>(true);
 
   // Parse rich content JSON structure
   const isRich = course.content && course.content.trim().startsWith('{"isRichContent"');
@@ -712,143 +714,163 @@ export default function CourseViewer({
       </div>
 
       {/* 1. TOP MAIN CONTROL RIBBON */}
-      <div className="flex flex-wrap items-center justify-between px-6 py-4 bg-white border-b border-slate-200 gap-4 z-[1002] shadow-sm pt-5">
-        
-        {/* Left Side: Back/Exit & Title */}
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={onClose}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition duration-200 border border-slate-200"
-            title="Quitter le lecteur plein écran"
-          >
-            <X size={14} />
-            <span>Fermer</span>
-          </button>
+      {showTopRibbon ? (
+        <div className="relative flex flex-wrap items-center justify-between px-4 py-1.5 bg-white border-b border-slate-200 gap-2 z-[1002] shadow-sm pt-2">
           
-          <div className="h-6 w-[1px] bg-slate-200 hidden sm:block"></div>
-
-          <button
-            onClick={() => setShowSidebar(!showSidebar)}
-            className={`p-2 rounded-lg border transition duration-200 ${
-              showSidebar ? "bg-indigo-50 border-indigo-200 text-indigo-600" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-            }`}
-            title="Table des matières"
-          >
-            <Layers size={15} />
-          </button>
-          
-          <div className="flex flex-col">
-            <h4 className="font-extrabold text-sm text-slate-900 line-clamp-1 max-w-[220px] md:max-w-md">
-              {course.title}
-            </h4>
-            <p className="text-[10px] text-slate-500 font-medium">
-              Enseignant : {course.authorName} • {course.id}
-            </p>
-          </div>
-        </div>
-
-        {/* Right Side: Zoom, Search, Watermark and Download Options */}
-        <div className="flex items-center space-x-3">
-          
-          {/* Zoom controls */}
-          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+          {/* Left Side: Back/Exit & Title */}
+          <div className="flex items-center space-x-2">
             <button
-              onClick={() => setZoomLevel(prev => Math.max(0, prev - 10))}
-              disabled={zoomLevel <= 0}
-              className="p-1 hover:bg-slate-200 text-slate-500 disabled:opacity-30 rounded transition"
-              title="Zoom Arrière"
+              onClick={onClose}
+              className="flex items-center space-x-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition duration-200 border border-slate-200"
+              title="Quitter le lecteur plein écran"
             >
-              <ZoomOut size={13} />
+              <X size={13} />
+              <span>Fermer</span>
             </button>
-            <span className="text-[11px] font-mono px-2 text-slate-700 font-bold w-12 text-center">{zoomLevel}%</span>
+            
+            <div className="h-5 w-[1px] bg-slate-200 hidden sm:block"></div>
+   
             <button
-              onClick={() => setZoomLevel(prev => Math.min(150, prev + 10))}
-              disabled={zoomLevel >= 150}
-              className="p-1 hover:bg-slate-200 text-slate-500 disabled:opacity-30 rounded transition"
-              title="Zoom Avant"
+              onClick={() => setShowSidebar(!showSidebar)}
+              className={`p-1.5 rounded-lg border transition duration-200 ${
+                showSidebar ? "bg-indigo-50 border-indigo-200 text-indigo-600" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+              }`}
+              title="Table des matières"
             >
-              <ZoomIn size={13} />
+              <Layers size={14} />
             </button>
-          </div>
-
-          {/* Search bar */}
-          <div className="relative hidden md:block">
-            <div className="absolute inset-y-0 left-2.5 flex items-center pointer-events-none text-slate-400">
-              <Search size={12} />
+            
+            <div className="flex flex-col">
+              <h4 className="font-extrabold text-xs text-slate-900 line-clamp-1 max-w-[120px] sm:max-w-[200px] md:max-w-md">
+                {course.title}
+              </h4>
+              <p className="text-[9px] text-slate-500 font-medium">
+                Enseignant : {course.authorName}
+              </p>
             </div>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Rechercher..."
-              className="w-44 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-lg pl-8 pr-6 py-1.5 text-[11px] text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery("")} 
-                className="absolute right-2 top-2 text-[10px] text-slate-400 hover:text-slate-600"
-              >
-                ✕
-              </button>
-            )}
           </div>
-
-          {/* WPS Visualizer Settings Button */}
-          <button
-            onClick={() => {
-              setShowWpsSettings(!showWpsSettings);
-              setShowWatermarkSettings(false); // close watermark if open
-            }}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg border text-[11px] font-bold transition duration-200 ${
-              showWpsSettings 
-                ? "bg-indigo-50 border-indigo-200 text-indigo-700" 
-                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-            }`}
-            title="Options de visionneuse (Style WPS)"
-          >
-            <BookOpen size={13} className={wpsMode ? "text-indigo-600 animate-pulse" : ""} />
-            <span>Options WPS</span>
-            {wpsMode && (
-              <span className="bg-indigo-600 text-white font-extrabold px-1.5 py-0.5 rounded-full text-[8px] uppercase scale-90">
-                WPS
-              </span>
-            )}
-          </button>
-
-          {/* Watermark customization button for student */}
-          {!isSuperAdmin && (
+   
+          {/* Right Side: Zoom, Search, Watermark and Download Options */}
+          <div className="flex items-center space-x-2 animate-fade-in">
+            
+            {/* Zoom controls */}
+            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-0.5">
+              <button
+                onClick={() => setZoomLevel(prev => Math.max(0, prev - 10))}
+                disabled={zoomLevel <= 0}
+                className="p-0.5 hover:bg-slate-200 text-slate-500 disabled:opacity-30 rounded transition"
+                title="Zoom Arrière"
+              >
+                <ZoomOut size={12} />
+              </button>
+              <span className="text-[10px] font-mono px-1.5 text-slate-700 font-bold w-10 text-center">{zoomLevel}%</span>
+              <button
+                onClick={() => setZoomLevel(prev => Math.min(150, prev + 10))}
+                disabled={zoomLevel >= 150}
+                className="p-0.5 hover:bg-slate-200 text-slate-500 disabled:opacity-30 rounded transition"
+                title="Zoom Avant"
+              >
+                <ZoomIn size={12} />
+              </button>
+            </div>
+   
+            {/* Search bar */}
+            <div className="relative hidden md:block">
+              <div className="absolute inset-y-0 left-2 flex items-center pointer-events-none text-slate-400">
+                <Search size={11} />
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Rechercher..."
+                className="w-32 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-lg pl-6 pr-5 py-1 text-[10px] text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery("")} 
+                  className="absolute right-1.5 top-1.5 text-[9px] text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+   
+            {/* WPS Visualizer Settings Button */}
             <button
-              onClick={() => setShowWatermarkSettings(!showWatermarkSettings)}
-              className={`flex items-center space-x-1 px-3 py-2 rounded-lg border text-[11px] font-bold transition duration-200 ${
-                showWatermarkSettings 
-                  ? "bg-amber-50 border-amber-200 text-amber-700" 
+              onClick={() => {
+                setShowWpsSettings(!showWpsSettings);
+                setShowWatermarkSettings(false); // close watermark if open
+              }}
+              className={`flex items-center space-x-1 px-2 py-1 rounded-lg border text-[10px] font-bold transition duration-200 ${
+                showWpsSettings 
+                  ? "bg-indigo-50 border-indigo-200 text-indigo-700" 
                   : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
               }`}
-              title="Paramètres de filigrane"
+              title="Options de visionneuse (Style WPS)"
             >
-              <Sliders size={13} />
-              <span className="hidden sm:inline">Options Filigrane</span>
+              <BookOpen size={12} className={wpsMode ? "text-indigo-600 animate-pulse" : ""} />
+              <span>Options WPS</span>
+              {wpsMode && (
+                <span className="bg-indigo-600 text-white font-extrabold px-1 py-0.2 rounded-full text-[7px] uppercase scale-90">
+                  WPS
+                </span>
+              )}
             </button>
-          )}
+   
+            {/* Watermark customization button for student */}
+            {!isSuperAdmin && (
+              <button
+                onClick={() => setShowWatermarkSettings(!showWatermarkSettings)}
+                className={`flex items-center space-x-1 px-2 py-1 rounded-lg border text-[10px] font-bold transition duration-200 ${
+                  showWatermarkSettings 
+                    ? "bg-amber-50 border-amber-200 text-amber-700" 
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+                title="Paramètres de filigrane"
+              >
+                <Sliders size={12} />
+                <span className="hidden sm:inline">Options Filigrane</span>
+              </button>
+            )}
+   
+            {/* Download button for administrators */}
+            {isSuperAdmin ? (
+              <button
+                onClick={downloadPDFForAdmin}
+                className="flex items-center space-x-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition duration-200 shadow-sm"
+                title="Télécharger l'original au format PDF"
+              >
+                <Download size={12} />
+                <span>Télécharger</span>
+              </button>
+            ) : (
+              <div className="flex items-center space-x-1 text-red-600 bg-red-50 border border-red-200 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                <Lock size={11} className="animate-pulse mr-0.5" />
+                <span>SÉCURISÉ</span>
+              </div>
+            )}
+          </div>
 
-          {/* Download button for administrators */}
-          {isSuperAdmin ? (
-            <button
-              onClick={downloadPDFForAdmin}
-              className="flex items-center space-x-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition duration-200 shadow-sm"
-              title="Télécharger l'original au format PDF"
-            >
-              <Download size={13} />
-              <span>Télécharger PDF</span>
-            </button>
-          ) : (
-            <div className="flex items-center space-x-1 text-red-600 bg-red-50 border border-red-200 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider">
-              <Lock size={12} className="animate-pulse mr-0.5" />
-              <span>SÉCURISÉ</span>
-            </div>
-          )}
+          {/* Collapsible toggle arrow button ↑ */}
+          <button
+            onClick={() => setShowTopRibbon(false)}
+            className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 bg-white border border-slate-200 shadow-md hover:bg-slate-100 text-indigo-600 rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95"
+            title="Masquer le ruban supérieur (Expérience plein écran)"
+          >
+            <ChevronUp size={14} className="stroke-[3]" />
+          </button>
         </div>
-      </div>
+      ) : (
+        /* Expand toggle arrow button ↓ */
+        <button
+          onClick={() => setShowTopRibbon(true)}
+          className="absolute top-2 left-1/2 -translate-x-1/2 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 animate-bounce"
+          title="Afficher le ruban supérieur"
+        >
+          <ChevronDown size={16} className="stroke-[3]" />
+        </button>
+      )}
 
       {/* 2. MAIN SPLIT BODY */}
       <div className="flex flex-1 overflow-hidden relative">
@@ -1402,22 +1424,42 @@ export default function CourseViewer({
       </div>
 
       {/* 4. BOTTOM FOOTER RIBBON */}
-      <div className="flex items-center justify-between px-6 py-4 bg-white border-t border-slate-200 z-[1002]">
-        <div className="text-xs text-slate-500 font-bold">
-          Progression : <strong className="text-indigo-600 font-black">{readingProgress}%</strong> complété
-        </div>
+      {showBottomRibbon ? (
+        <div className="relative flex items-center justify-between px-6 py-4 bg-white border-t border-slate-200 z-[1002]">
+          <div className="text-xs text-slate-500 font-bold">
+            Progression : <strong className="text-indigo-600 font-black">{readingProgress}%</strong> complété
+          </div>
 
+          <button
+            onClick={() => {
+              const canvas = document.getElementById("pdf-document-scroll-canvas");
+              if (canvas) canvas.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-bold transition border border-slate-200"
+          >
+            <ArrowUp size={13} />
+            <span>Haut de page</span>
+          </button>
+
+          {/* Collapsible toggle arrow button ↓ */}
+          <button
+            onClick={() => setShowBottomRibbon(false)}
+            className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white border border-slate-200 shadow-md hover:bg-slate-100 text-indigo-600 rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95"
+            title="Masquer la barre inférieure (Expérience plein écran)"
+          >
+            <ChevronDown size={14} className="stroke-[3]" />
+          </button>
+        </div>
+      ) : (
+        /* Expand toggle arrow button ↑ */
         <button
-          onClick={() => {
-            const canvas = document.getElementById("pdf-document-scroll-canvas");
-            if (canvas) canvas.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          className="flex items-center space-x-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-bold transition border border-slate-200"
+          onClick={() => setShowBottomRibbon(true)}
+          className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg rounded-full p-1.5 z-[1003] transition-all flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 animate-bounce"
+          title="Afficher la barre inférieure"
         >
-          <ArrowUp size={13} />
-          <span>Haut de page</span>
+          <ChevronUp size={16} className="stroke-[3]" />
         </button>
-      </div>
+      )}
 
     </div>
   );
