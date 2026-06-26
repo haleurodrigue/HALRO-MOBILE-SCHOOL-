@@ -24,6 +24,7 @@ import {
   saveClassToFirestore, 
   deleteClassFromFirestore,
   saveCourseToFirestore, 
+  deleteCourseFromFirestore,
   saveTeacherToFirestore, 
   deleteTeacherFromFirestore,
   saveStudentCodeToFirestore, 
@@ -457,9 +458,11 @@ export default function App() {
 
   // Super Admin action: Add class
   const handleAddClass = (newCl: Class) => {
-    setClasses(prev => [...prev, newCl]);
+    const isSim = activePortal !== "portal";
+    const clToSave = { ...newCl, ...(isSim ? { isSimulated: true } : {}) };
+    setClasses(prev => [...prev, clToSave]);
     if (isOnline && !simulateOffline) {
-      saveClassToFirestore(newCl).catch(e => console.error("Firestore sync failed", e));
+      saveClassToFirestore(clToSave).catch(e => console.error("Firestore sync failed", e));
     }
   };
 
@@ -472,9 +475,11 @@ export default function App() {
 
   // Super Admin / Teacher action: Add Course
   const handleAddCourse = (newCourse: Course) => {
-    setCourses(prev => [...prev, newCourse]);
+    const isSim = activePortal !== "portal";
+    const courseToSave = { ...newCourse, ...(isSim ? { isSimulated: true } : {}) };
+    setCourses(prev => [...prev, courseToSave]);
     if (isOnline && !simulateOffline) {
-      saveCourseToFirestore(newCourse).catch(e => console.error("Firestore sync failed", e));
+      saveCourseToFirestore(courseToSave).catch(e => console.error("Firestore sync failed", e));
     }
   };
 
@@ -487,9 +492,11 @@ export default function App() {
 
   // Super Admin action: Enroll Teacher
   const handleAddTeacher = (newTeach: Teacher) => {
-    setTeachers(prev => [...prev, newTeach]);
+    const isSim = activePortal !== "portal";
+    const teachToSave = { ...newTeach, ...(isSim ? { isSimulated: true } : {}) };
+    setTeachers(prev => [...prev, teachToSave]);
     if (isOnline && !simulateOffline) {
-      saveTeacherToFirestore(newTeach).catch(e => console.error("Firestore sync failed", e));
+      saveTeacherToFirestore(teachToSave).catch(e => console.error("Firestore sync failed", e));
     }
   };
 
@@ -517,19 +524,24 @@ export default function App() {
 
   // Teacher action: Request Payout
   const handleSendPayoutRequest = (req: PayoutRequest) => {
-    setPayoutRequests(prev => [req, ...prev]);
+    const isSim = activePortal !== "portal";
+    const reqToSave = { ...req, ...(isSim ? { isSimulated: true } : {}) };
+    setPayoutRequests(prev => [reqToSave, ...prev]);
     if (isOnline && !simulateOffline) {
-      savePayoutRequestToFirestore(req).catch(e => console.error("Firestore sync failed", e));
+      savePayoutRequestToFirestore(reqToSave).catch(e => console.error("Firestore sync failed", e));
     }
   };
 
   // Super Admin action: Resolve Payout Request, reset balance & generate invoice
   const handleResolvePayout = (requestId: string, invoice: Invoice) => {
+    const isSim = activePortal !== "portal";
+    const invoiceToSave = { ...invoice, ...(isSim ? { isSimulated: true } : {}) };
+
     // 1. Mark request as paid
     setPayoutRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: "paid" } : r));
     
     // 2. Add Invoice record
-    setInvoices(prev => [invoice, ...prev]);
+    setInvoices(prev => [invoiceToSave, ...prev]);
 
     // 3. Reset teacher balance to 0 in active list
     setTeachers(prev => prev.map(t => t.matricule === invoice.teacherMatricule ? { ...t, balance: 0 } : t));
@@ -542,7 +554,7 @@ export default function App() {
       }
       
       // Save Invoice
-      saveInvoiceToFirestore(invoice).catch(e => console.error("Firestore sync failed", e));
+      saveInvoiceToFirestore(invoiceToSave).catch(e => console.error("Firestore sync failed", e));
       
       // Reset teacher balance in Firestore
       const targetTeacher = teachers.find(t => t.matricule === invoice.teacherMatricule);
@@ -594,45 +606,76 @@ export default function App() {
 
   // Super Admin / Teacher action: Generate code
   const handleGenerateCode = (newCode: StudentCode, commissionDetails?: string) => {
-    setStudentCodes(prev => [newCode, ...prev]);
+    const isSim = activePortal !== "portal";
+    const codeToSave = { ...newCode, ...(isSim ? { isSimulated: true } : {}) };
+    setStudentCodes(prev => [codeToSave, ...prev]);
     if (commissionDetails) {
       console.log("Commissions distribuées :", commissionDetails);
     }
     if (isOnline && !simulateOffline) {
-      saveStudentCodeToFirestore(newCode).catch(e => console.error("Firestore sync failed", e));
+      saveStudentCodeToFirestore(codeToSave).catch(e => console.error("Firestore sync failed", e));
     }
   };
 
   const resetAllDataToDefault = async () => {
-    const confirm = window.confirm("Voulez-vous réinitialiser toutes les données de l'application à leur état initial ? (Toutes vos modifications seront perdues)");
+    const confirm = window.confirm("Voulez-vous réinitialiser uniquement les données créées en mode simulation Bac à sable ? Les enseignants, élèves, cours simulés, commissions et demandes de paiement de simulation seront effacés. Vos configurations administratives réelles, cours importés et code d'administration personnalisé seront précieusement conservés.");
     if (!confirm) return;
 
-    localStorage.removeItem("halro_classes");
-    localStorage.removeItem("halro_courses");
-    localStorage.removeItem("halro_teachers");
-    localStorage.removeItem("halro_student_codes");
-    localStorage.removeItem("halro_payout_requests");
-    localStorage.removeItem("halro_invoices");
-    localStorage.removeItem("halro_admin_code");
-    localStorage.setItem("halro_app_version", "v2");
+    // Filter out simulated items (those that have isSimulated: true)
+    const remainingClasses = classes.filter(c => !c.isSimulated);
+    const remainingCourses = courses.filter(c => !c.isSimulated);
+    const remainingTeachers = teachers.filter(t => !t.isSimulated);
+    const remainingStudentCodes = studentCodes.filter(c => !c.isSimulated);
+    const remainingPayoutRequests = payoutRequests.filter(r => !r.isSimulated);
+    const remainingInvoices = invoices.filter(i => !i.isSimulated);
 
+    // Save remaining (real) items to local storage / IndexedDB
+    localStorage.setItem("halro_classes", JSON.stringify(remainingClasses));
+    await saveCoursesToIndexedDB(remainingCourses);
+    localStorage.setItem("halro_teachers", JSON.stringify(remainingTeachers));
+    localStorage.setItem("halro_student_codes", JSON.stringify(remainingStudentCodes));
+    localStorage.setItem("halro_payout_requests", JSON.stringify(remainingPayoutRequests));
+    localStorage.setItem("halro_invoices", JSON.stringify(remainingInvoices));
+
+    // Update state
+    setClasses(remainingClasses);
+    setCourses(remainingCourses);
+    setTeachers(remainingTeachers);
+    setStudentCodes(remainingStudentCodes);
+    setPayoutRequests(remainingPayoutRequests);
+    setInvoices(remainingInvoices);
+
+    // Sync deletion of simulated ones in Firestore
     if (isOnline && !simulateOffline) {
       try {
-        await resetFirestore();
-        console.log("Firestore reset successfully.");
+        const simulatedCourses = courses.filter(c => c.isSimulated);
+        const simulatedTeachers = teachers.filter(t => t.isSimulated);
+        const simulatedStudentCodes = studentCodes.filter(c => c.isSimulated);
+        const simulatedPayoutRequests = payoutRequests.filter(r => r.isSimulated);
+        const simulatedInvoices = invoices.filter(i => i.isSimulated);
+
+        for (const c of simulatedCourses) {
+          await deleteCourseFromFirestore(c.id);
+        }
+        for (const t of simulatedTeachers) {
+          await deleteTeacherFromFirestore(t.id);
+        }
+        for (const sc of simulatedStudentCodes) {
+          await deleteStudentCodeFromFirestore(sc.id);
+        }
+        for (const r of simulatedPayoutRequests) {
+          await deletePayoutRequestFromFirestore(r.id);
+        }
+        for (const iv of simulatedInvoices) {
+          await deleteInvoiceFromFirestore(iv.id);
+        }
+        console.log("Firestore simulation data reset successfully.");
       } catch (e) {
-        console.error("Failed to reset Firestore:", e);
+        console.error("Failed to reset Firestore simulation data:", e);
       }
     }
 
-    setClasses(initialClasses);
-    setCourses(initialCourses);
-    setTeachers(initialTeachers);
-    setStudentCodes(initialStudentCodes);
-    setPayoutRequests([]);
-    setInvoices([]);
-    setSuperAdminCode("admin1234");
-    alert("Données réinitialisées !");
+    alert("Données de simulation réinitialisées avec succès ! Vos données et configurations réelles sont préservées.");
   };
 
   return (

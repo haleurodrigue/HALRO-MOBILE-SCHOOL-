@@ -7,6 +7,7 @@ export interface Class {
   id: string;
   name: string; // e.g. "Première A4", "Première D", etc.
   description: string;
+  isSimulated?: boolean;
 }
 
 export interface Course {
@@ -17,6 +18,7 @@ export interface Course {
   authorName: string;
   content: string; // Le contenu complet du document de cours pour une lecture continue
   createdAt: string;
+  isSimulated?: boolean;
 }
 
 export interface TeacherPermissions {
@@ -36,6 +38,7 @@ export interface Teacher {
   balance: number;
   permissions: TeacherPermissions;
   createdAt: string;
+  isSimulated?: boolean;
 }
 
 export type AccessCodeType = "temporary" | "definitive";
@@ -53,6 +56,7 @@ export interface StudentCode {
   createdAt: string;
   expiresAt: string; // 30 mins for temp, 1 year for definitive
   devicesUsed: string[]; // List of simulated device IDs
+  isSimulated?: boolean;
 }
 
 export interface PayoutRequest {
@@ -66,6 +70,7 @@ export interface PayoutRequest {
   amount: number;
   status: "pending" | "paid";
   createdAt: string;
+  isSimulated?: boolean;
 }
 
 export interface Invoice {
@@ -79,6 +84,7 @@ export interface Invoice {
   amount: number;
   paidAt: string;
   adminCode: string;
+  isSimulated?: boolean;
 }
 
 export interface AppState {
