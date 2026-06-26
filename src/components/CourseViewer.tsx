@@ -1426,10 +1426,10 @@ export default function CourseViewer({
       )}
 
       {/* Global Stable Toggle Buttons for Top and Bottom Ribbons */}
-      {/* Top Ribbon Toggle (Fixed at top-[38px] on the left) */}
+      {/* Top Ribbon Toggle (Fixed at top-[38px] on the right) */}
       <button
         onClick={() => setShowTopRibbon(!showTopRibbon)}
-        className={`absolute top-[38px] left-6 z-[1003] border shadow-md rounded-full p-1.5 transition-all duration-200 flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 ${
+        className={`absolute top-[38px] right-6 z-[1003] border shadow-md rounded-full p-1.5 transition-all duration-200 flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 ${
           showTopRibbon 
             ? "bg-white border-slate-200 text-indigo-600 hover:bg-slate-50" 
             : "bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500"
@@ -1443,10 +1443,10 @@ export default function CourseViewer({
         )}
       </button>
 
-      {/* Bottom Ribbon Toggle (Fixed at bottom-[50px] on the left) */}
+      {/* Bottom Ribbon Toggle (Fixed at bottom-[50px] on the right) */}
       <button
         onClick={() => setShowBottomRibbon(!showBottomRibbon)}
-        className={`absolute bottom-[50px] left-6 z-[1003] border shadow-md rounded-full p-1.5 transition-all duration-200 flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 ${
+        className={`absolute bottom-[50px] right-6 z-[1003] border shadow-md rounded-full p-1.5 transition-all duration-200 flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 ${
           showBottomRibbon 
             ? "bg-white border-slate-200 text-indigo-600 hover:bg-slate-50" 
             : "bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500"
