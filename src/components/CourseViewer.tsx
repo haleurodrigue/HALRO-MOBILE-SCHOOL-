@@ -956,14 +956,14 @@ export default function CourseViewer({
                               return (
                                 <li 
                                   key={idx} 
-                                  className="book-paragraph text-sm md:text-base font-sans text-center list-none scroll-mt-24 my-2"
+                                  className="book-paragraph text-sm md:text-base ml-6 list-disc font-sans text-justify scroll-mt-24 pl-2 my-2"
                                   style={{ 
                                     fontSize: `${fontSize}px`, 
                                     lineHeight: getLineHeightVal(),
                                     color: activeTheme.id === "night" ? "#d0d4d8" : undefined
                                   }}
                                 >
-                                  • {renderHighlightedContent(cleanBulletText)}
+                                  {renderHighlightedContent(cleanBulletText)}
                                 </li>
                               );
                             }
@@ -971,12 +971,12 @@ export default function CourseViewer({
                             return (
                               <p 
                                 key={idx} 
-                                className="book-paragraph text-sm md:text-base font-sans text-center scroll-mt-24"
+                                className="book-paragraph text-sm md:text-base font-sans text-justify scroll-mt-24"
                                 style={{ 
                                   fontSize: `${fontSize}px`, 
                                   lineHeight: getLineHeightVal(),
                                   marginBottom: "1.25rem",
-                                  textIndent: "0",
+                                  textIndent: wpsMode ? "1.5rem" : "0",
                                   color: activeTheme.id === "night" ? "#d0d4d8" : undefined
                                 }}
                               >
