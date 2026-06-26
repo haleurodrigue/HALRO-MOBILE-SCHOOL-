@@ -73,6 +73,15 @@ export default function App() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // Sandbox Isolated States (Mirror for Sandbox Mode)
+  const [sandboxClasses, setSandboxClasses] = useState<Class[]>([]);
+  const [sandboxCourses, setSandboxCourses] = useState<Course[]>([]);
+  const [sandboxTeachers, setSandboxTeachers] = useState<Teacher[]>([]);
+  const [sandboxStudentCodes, setSandboxStudentCodes] = useState<StudentCode[]>([]);
+  const [sandboxPayoutRequests, setSandboxPayoutRequests] = useState<PayoutRequest[]>([]);
+  const [sandboxInvoices, setSandboxInvoices] = useState<Invoice[]>([]);
+  const [sandboxSuperAdminCode, setSandboxSuperAdminCode] = useState("admin1234");
+
   // Simulated Device State
   const [currentDeviceId] = useState<string>(() => {
     const stored = localStorage.getItem("halro_device_id");
@@ -442,6 +451,60 @@ export default function App() {
     }
   }, [superAdminCode, isLoaded]);
 
+  // Load sandbox data from local storage on startup or copy/mirror the production arrays
+  useEffect(() => {
+    if (isLoaded) {
+      const storedClasses = localStorage.getItem("sandbox_halro_classes");
+      if (storedClasses) {
+        try { setSandboxClasses(JSON.parse(storedClasses)); } catch (e) { setSandboxClasses([...classes]); }
+      } else {
+        setSandboxClasses([...classes]);
+      }
+
+      const storedCourses = localStorage.getItem("sandbox_halro_courses");
+      if (storedCourses) {
+        try { setSandboxCourses(JSON.parse(storedCourses)); } catch (e) { setSandboxCourses([...courses]); }
+      } else {
+        setSandboxCourses([...courses]);
+      }
+
+      const storedTeachers = localStorage.getItem("sandbox_halro_teachers");
+      if (storedTeachers) {
+        try { setSandboxTeachers(JSON.parse(storedTeachers)); } catch (e) { setSandboxTeachers([...teachers]); }
+      } else {
+        setSandboxTeachers([...teachers]);
+      }
+
+      const storedCodes = localStorage.getItem("sandbox_halro_student_codes");
+      if (storedCodes) {
+        try { setSandboxStudentCodes(JSON.parse(storedCodes)); } catch (e) { setSandboxStudentCodes([...studentCodes]); }
+      } else {
+        setSandboxStudentCodes([...studentCodes]);
+      }
+
+      const storedPayouts = localStorage.getItem("sandbox_halro_payout_requests");
+      if (storedPayouts) {
+        try { setSandboxPayoutRequests(JSON.parse(storedPayouts)); } catch (e) { setSandboxPayoutRequests([...payoutRequests]); }
+      } else {
+        setSandboxPayoutRequests([...payoutRequests]);
+      }
+
+      const storedInvoices = localStorage.getItem("sandbox_halro_invoices");
+      if (storedInvoices) {
+        try { setSandboxInvoices(JSON.parse(storedInvoices)); } catch (e) { setSandboxInvoices([...invoices]); }
+      } else {
+        setSandboxInvoices([...invoices]);
+      }
+
+      const storedAdminCode = localStorage.getItem("sandbox_halro_admin_code");
+      if (storedAdminCode) {
+        setSandboxSuperAdminCode(storedAdminCode);
+      } else {
+        setSandboxSuperAdminCode(superAdminCode);
+      }
+    }
+  }, [isLoaded, classes, courses, teachers, studentCodes, payoutRequests, invoices, superAdminCode]);
+
   // Handle Online/Offline Status
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -459,126 +522,216 @@ export default function App() {
   // Super Admin action: Add class
   const handleAddClass = (newCl: Class) => {
     const isSim = activePortal !== "portal";
-    const clToSave = { ...newCl, ...(isSim ? { isSimulated: true } : {}) };
-    setClasses(prev => [...prev, clToSave]);
-    if (isOnline && !simulateOffline) {
-      saveClassToFirestore(clToSave).catch(e => console.error("Firestore sync failed", e));
+    if (isSim) {
+      setSandboxClasses(prev => {
+        const updated = [...prev, newCl];
+        localStorage.setItem("sandbox_halro_classes", JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      setClasses(prev => [...prev, newCl]);
+      if (isOnline && !simulateOffline) {
+        saveClassToFirestore(newCl).catch(e => console.error("Firestore sync failed", e));
+      }
     }
   };
 
   const handleDeleteClass = (classId: string) => {
-    setClasses(prev => prev.filter(c => c.id !== classId));
-    if (isOnline && !simulateOffline) {
-      deleteClassFromFirestore(classId).catch(e => console.error("Firestore sync failed", e));
+    const isSim = activePortal !== "portal";
+    if (isSim) {
+      setSandboxClasses(prev => {
+        const updated = prev.filter(c => c.id !== classId);
+        localStorage.setItem("sandbox_halro_classes", JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      setClasses(prev => prev.filter(c => c.id !== classId));
+      if (isOnline && !simulateOffline) {
+        deleteClassFromFirestore(classId).catch(e => console.error("Firestore sync failed", e));
+      }
     }
   };
 
   // Super Admin / Teacher action: Add Course
   const handleAddCourse = (newCourse: Course) => {
     const isSim = activePortal !== "portal";
-    const courseToSave = { ...newCourse, ...(isSim ? { isSimulated: true } : {}) };
-    setCourses(prev => [...prev, courseToSave]);
-    if (isOnline && !simulateOffline) {
-      saveCourseToFirestore(courseToSave).catch(e => console.error("Firestore sync failed", e));
+    if (isSim) {
+      setSandboxCourses(prev => {
+        const updated = [...prev, newCourse];
+        localStorage.setItem("sandbox_halro_courses", JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      setCourses(prev => [...prev, newCourse]);
+      if (isOnline && !simulateOffline) {
+        saveCourseToFirestore(newCourse).catch(e => console.error("Firestore sync failed", e));
+      }
     }
   };
 
   const handleUpdateCourses = (updated: Course[]) => {
-    setCourses(updated);
-    if (isOnline && !simulateOffline) {
-      updated.forEach(c => saveCourseToFirestore(c).catch(e => console.error("Firestore sync failed", e)));
+    const isSim = activePortal !== "portal";
+    if (isSim) {
+      setSandboxCourses(updated);
+      localStorage.setItem("sandbox_halro_courses", JSON.stringify(updated));
+    } else {
+      setCourses(updated);
+      if (isOnline && !simulateOffline) {
+        updated.forEach(c => saveCourseToFirestore(c).catch(e => console.error("Firestore sync failed", e)));
+      }
     }
   };
 
   // Super Admin action: Enroll Teacher
   const handleAddTeacher = (newTeach: Teacher) => {
     const isSim = activePortal !== "portal";
-    const teachToSave = { ...newTeach, ...(isSim ? { isSimulated: true } : {}) };
-    setTeachers(prev => [...prev, teachToSave]);
-    if (isOnline && !simulateOffline) {
-      saveTeacherToFirestore(teachToSave).catch(e => console.error("Firestore sync failed", e));
+    if (isSim) {
+      setSandboxTeachers(prev => {
+        const updated = [...prev, newTeach];
+        localStorage.setItem("sandbox_halro_teachers", JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      setTeachers(prev => [...prev, newTeach]);
+      if (isOnline && !simulateOffline) {
+        saveTeacherToFirestore(newTeach).catch(e => console.error("Firestore sync failed", e));
+      }
     }
   };
 
   const handleDeleteTeacher = (teacherId: string) => {
-    setTeachers(prev => prev.filter(t => t.id !== teacherId));
-    if (isOnline && !simulateOffline) {
-      deleteTeacherFromFirestore(teacherId).catch(e => console.error("Firestore sync failed", e));
+    const isSim = activePortal !== "portal";
+    if (isSim) {
+      setSandboxTeachers(prev => {
+        const updated = prev.filter(t => t.id !== teacherId);
+        localStorage.setItem("sandbox_halro_teachers", JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      setTeachers(prev => prev.filter(t => t.id !== teacherId));
+      if (isOnline && !simulateOffline) {
+        deleteTeacherFromFirestore(teacherId).catch(e => console.error("Firestore sync failed", e));
+      }
     }
   };
 
   // Super Admin / Teacher action: update student codes
   const handleUpdateStudentCodes = (updated: StudentCode[]) => {
-    setStudentCodes(updated);
-    if (isOnline && !simulateOffline) {
-      updated.forEach(c => saveStudentCodeToFirestore(c).catch(e => console.error("Firestore sync failed", e)));
+    const isSim = activePortal !== "portal";
+    if (isSim) {
+      setSandboxStudentCodes(updated);
+      localStorage.setItem("sandbox_halro_student_codes", JSON.stringify(updated));
+    } else {
+      setStudentCodes(updated);
+      if (isOnline && !simulateOffline) {
+        updated.forEach(c => saveStudentCodeToFirestore(c).catch(e => console.error("Firestore sync failed", e)));
+      }
     }
   };
 
   const handleDeleteStudentCode = (codeId: string) => {
-    setStudentCodes(prev => prev.filter(c => c.id !== codeId));
-    if (isOnline && !simulateOffline) {
-      deleteStudentCodeFromFirestore(codeId).catch(e => console.error("Firestore sync failed", e));
+    const isSim = activePortal !== "portal";
+    if (isSim) {
+      setSandboxStudentCodes(prev => {
+        const updated = prev.filter(c => c.id !== codeId);
+        localStorage.setItem("sandbox_halro_student_codes", JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      setStudentCodes(prev => prev.filter(c => c.id !== codeId));
+      if (isOnline && !simulateOffline) {
+        deleteStudentCodeFromFirestore(codeId).catch(e => console.error("Firestore sync failed", e));
+      }
     }
   };
 
   // Teacher action: Request Payout
   const handleSendPayoutRequest = (req: PayoutRequest) => {
     const isSim = activePortal !== "portal";
-    const reqToSave = { ...req, ...(isSim ? { isSimulated: true } : {}) };
-    setPayoutRequests(prev => [reqToSave, ...prev]);
-    if (isOnline && !simulateOffline) {
-      savePayoutRequestToFirestore(reqToSave).catch(e => console.error("Firestore sync failed", e));
+    if (isSim) {
+      setSandboxPayoutRequests(prev => {
+        const updated = [req, ...prev];
+        localStorage.setItem("sandbox_halro_payout_requests", JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      setPayoutRequests(prev => [req, ...prev]);
+      if (isOnline && !simulateOffline) {
+        savePayoutRequestToFirestore(req).catch(e => console.error("Firestore sync failed", e));
+      }
     }
   };
 
   // Super Admin action: Resolve Payout Request, reset balance & generate invoice
   const handleResolvePayout = (requestId: string, invoice: Invoice) => {
     const isSim = activePortal !== "portal";
-    const invoiceToSave = { ...invoice, ...(isSim ? { isSimulated: true } : {}) };
-
-    // 1. Mark request as paid
-    setPayoutRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: "paid" } : r));
-    
-    // 2. Add Invoice record
-    setInvoices(prev => [invoiceToSave, ...prev]);
-
-    // 3. Reset teacher balance to 0 in active list
-    setTeachers(prev => prev.map(t => t.matricule === invoice.teacherMatricule ? { ...t, balance: 0 } : t));
-
-    if (isOnline && !simulateOffline) {
-      // Find the request to update
-      const targetReq = payoutRequests.find(r => r.id === requestId);
-      if (targetReq) {
-        savePayoutRequestToFirestore({ ...targetReq, status: "paid" }).catch(e => console.error("Firestore sync failed", e));
-      }
+    if (isSim) {
+      setSandboxPayoutRequests(prev => {
+        const updated = prev.map(r => r.id === requestId ? { ...r, status: "paid" as const } : r);
+        localStorage.setItem("sandbox_halro_payout_requests", JSON.stringify(updated));
+        return updated;
+      });
+      setSandboxInvoices(prev => {
+        const updated = [invoice, ...prev];
+        localStorage.setItem("sandbox_halro_invoices", JSON.stringify(updated));
+        return updated;
+      });
+      setSandboxTeachers(prev => {
+        const updated = prev.map(t => t.matricule === invoice.teacherMatricule ? { ...t, balance: 0 } : t);
+        localStorage.setItem("sandbox_halro_teachers", JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      // 1. Mark request as paid
+      setPayoutRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: "paid" } : r));
       
-      // Save Invoice
-      saveInvoiceToFirestore(invoiceToSave).catch(e => console.error("Firestore sync failed", e));
-      
-      // Reset teacher balance in Firestore
-      const targetTeacher = teachers.find(t => t.matricule === invoice.teacherMatricule);
-      if (targetTeacher) {
-        saveTeacherToFirestore({ ...targetTeacher, balance: 0 }).catch(e => console.error("Firestore sync failed", e));
+      // 2. Add Invoice record
+      setInvoices(prev => [invoice, ...prev]);
+
+      // 3. Reset teacher balance to 0 in active list
+      setTeachers(prev => prev.map(t => t.matricule === invoice.teacherMatricule ? { ...t, balance: 0 } : t));
+
+      if (isOnline && !simulateOffline) {
+        const targetReq = payoutRequests.find(r => r.id === requestId);
+        if (targetReq) {
+          savePayoutRequestToFirestore({ ...targetReq, status: "paid" }).catch(e => console.error("Firestore sync failed", e));
+        }
+        saveInvoiceToFirestore(invoice).catch(e => console.error("Firestore sync failed", e));
+        const targetTeacher = teachers.find(t => t.matricule === invoice.teacherMatricule);
+        if (targetTeacher) {
+          saveTeacherToFirestore({ ...targetTeacher, balance: 0 }).catch(e => console.error("Firestore sync failed", e));
+        }
       }
     }
   };
 
   // Super Admin action: Update teachers
   const handleUpdateTeachers = (updated: Teacher[]) => {
-    setTeachers(updated);
-    if (isOnline && !simulateOffline) {
-      updated.forEach(t => saveTeacherToFirestore(t).catch(e => console.error("Firestore sync failed", e)));
+    const isSim = activePortal !== "portal";
+    if (isSim) {
+      setSandboxTeachers(updated);
+      localStorage.setItem("sandbox_halro_teachers", JSON.stringify(updated));
+    } else {
+      setTeachers(updated);
+      if (isOnline && !simulateOffline) {
+        updated.forEach(t => saveTeacherToFirestore(t).catch(e => console.error("Firestore sync failed", e)));
+      }
     }
   };
 
   // Super Admin action: Update Super Admin Code
   const handleUpdateSuperAdminCode = (newCode: string) => {
-    setSuperAdminCode(newCode);
-    setMaintenanceBypassCode(newCode);
-    localStorage.setItem("halro_bypass_maintenance_code", newCode);
-    if (isOnline && !simulateOffline) {
-      saveSettingsToFirestore({ superAdminCode: newCode, sandboxModeEnabled, maintenanceModeEnabled }).catch(e => console.error("Firestore sync failed for settings", e));
+    const isSim = activePortal !== "portal";
+    if (isSim) {
+      setSandboxSuperAdminCode(newCode);
+      localStorage.setItem("sandbox_halro_admin_code", newCode);
+    } else {
+      setSuperAdminCode(newCode);
+      setMaintenanceBypassCode(newCode);
+      localStorage.setItem("halro_bypass_maintenance_code", newCode);
+      if (isOnline && !simulateOffline) {
+        saveSettingsToFirestore({ superAdminCode: newCode, sandboxModeEnabled, maintenanceModeEnabled }).catch(e => console.error("Firestore sync failed for settings", e));
+      }
     }
   };
 
@@ -588,6 +741,11 @@ export default function App() {
     localStorage.setItem("halro_sandbox_mode_enabled", JSON.stringify(enabled));
     if (isOnline && !simulateOffline) {
       saveSettingsToFirestore({ superAdminCode, sandboxModeEnabled: enabled, maintenanceModeEnabled }).catch(e => console.error("Firestore sync failed for settings", e));
+    }
+    if (enabled) {
+      setActivePortal("student");
+    } else {
+      setActivePortal("portal");
     }
   };
 
@@ -607,13 +765,20 @@ export default function App() {
   // Super Admin / Teacher action: Generate code
   const handleGenerateCode = (newCode: StudentCode, commissionDetails?: string) => {
     const isSim = activePortal !== "portal";
-    const codeToSave = { ...newCode, ...(isSim ? { isSimulated: true } : {}) };
-    setStudentCodes(prev => [codeToSave, ...prev]);
-    if (commissionDetails) {
-      console.log("Commissions distribuées :", commissionDetails);
-    }
-    if (isOnline && !simulateOffline) {
-      saveStudentCodeToFirestore(codeToSave).catch(e => console.error("Firestore sync failed", e));
+    if (isSim) {
+      setSandboxStudentCodes(prev => {
+        const updated = [newCode, ...prev];
+        localStorage.setItem("sandbox_halro_student_codes", JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      setStudentCodes(prev => [newCode, ...prev]);
+      if (commissionDetails) {
+        console.log("Commissions distribuées :", commissionDetails);
+      }
+      if (isOnline && !simulateOffline) {
+        saveStudentCodeToFirestore(newCode).catch(e => console.error("Firestore sync failed", e));
+      }
     }
   };
 
@@ -621,59 +786,23 @@ export default function App() {
     const confirm = window.confirm("Voulez-vous réinitialiser uniquement les données créées en mode simulation Bac à sable ? Les enseignants, élèves, cours simulés, commissions et demandes de paiement de simulation seront effacés. Vos configurations administratives réelles, cours importés et code d'administration personnalisé seront précieusement conservés.");
     if (!confirm) return;
 
-    // Filter out simulated items (those that have isSimulated: true)
-    const remainingClasses = classes.filter(c => !c.isSimulated);
-    const remainingCourses = courses.filter(c => !c.isSimulated);
-    const remainingTeachers = teachers.filter(t => !t.isSimulated);
-    const remainingStudentCodes = studentCodes.filter(c => !c.isSimulated);
-    const remainingPayoutRequests = payoutRequests.filter(r => !r.isSimulated);
-    const remainingInvoices = invoices.filter(i => !i.isSimulated);
+    // Clear sandbox keys from local storage
+    localStorage.removeItem("sandbox_halro_classes");
+    localStorage.removeItem("sandbox_halro_courses");
+    localStorage.removeItem("sandbox_halro_teachers");
+    localStorage.removeItem("sandbox_halro_student_codes");
+    localStorage.removeItem("sandbox_halro_payout_requests");
+    localStorage.removeItem("sandbox_halro_invoices");
+    localStorage.removeItem("sandbox_halro_admin_code");
 
-    // Save remaining (real) items to local storage / IndexedDB
-    localStorage.setItem("halro_classes", JSON.stringify(remainingClasses));
-    await saveCoursesToIndexedDB(remainingCourses);
-    localStorage.setItem("halro_teachers", JSON.stringify(remainingTeachers));
-    localStorage.setItem("halro_student_codes", JSON.stringify(remainingStudentCodes));
-    localStorage.setItem("halro_payout_requests", JSON.stringify(remainingPayoutRequests));
-    localStorage.setItem("halro_invoices", JSON.stringify(remainingInvoices));
-
-    // Update state
-    setClasses(remainingClasses);
-    setCourses(remainingCourses);
-    setTeachers(remainingTeachers);
-    setStudentCodes(remainingStudentCodes);
-    setPayoutRequests(remainingPayoutRequests);
-    setInvoices(remainingInvoices);
-
-    // Sync deletion of simulated ones in Firestore
-    if (isOnline && !simulateOffline) {
-      try {
-        const simulatedCourses = courses.filter(c => c.isSimulated);
-        const simulatedTeachers = teachers.filter(t => t.isSimulated);
-        const simulatedStudentCodes = studentCodes.filter(c => c.isSimulated);
-        const simulatedPayoutRequests = payoutRequests.filter(r => r.isSimulated);
-        const simulatedInvoices = invoices.filter(i => i.isSimulated);
-
-        for (const c of simulatedCourses) {
-          await deleteCourseFromFirestore(c.id);
-        }
-        for (const t of simulatedTeachers) {
-          await deleteTeacherFromFirestore(t.id);
-        }
-        for (const sc of simulatedStudentCodes) {
-          await deleteStudentCodeFromFirestore(sc.id);
-        }
-        for (const r of simulatedPayoutRequests) {
-          await deletePayoutRequestFromFirestore(r.id);
-        }
-        for (const iv of simulatedInvoices) {
-          await deleteInvoiceFromFirestore(iv.id);
-        }
-        console.log("Firestore simulation data reset successfully.");
-      } catch (e) {
-        console.error("Failed to reset Firestore simulation data:", e);
-      }
-    }
+    // Re-clone from production data!
+    setSandboxClasses([...classes]);
+    setSandboxCourses([...courses]);
+    setSandboxTeachers([...teachers]);
+    setSandboxStudentCodes([...studentCodes]);
+    setSandboxPayoutRequests([...payoutRequests]);
+    setSandboxInvoices([...invoices]);
+    setSandboxSuperAdminCode(superAdminCode);
 
     alert("Données de simulation réinitialisées avec succès ! Vos données et configurations réelles sont préservées.");
   };
@@ -1131,15 +1260,15 @@ export default function App() {
               {actualShowSandboxControls && (
                 <div className="text-center mb-4 max-w-sm mx-auto">
                   <span className="text-[9px] font-extrabold tracking-widest text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-500/10 uppercase">
-                    Simulation Élève (Mobile)
+                    Simulation Élève (Mobile) [BAC À SABLE]
                   </span>
                 </div>
               )}
               
               <StudentMobileApp
-                classes={classes}
-                courses={courses}
-                studentCodes={studentCodes}
+                classes={sandboxClasses}
+                courses={sandboxCourses}
+                studentCodes={sandboxStudentCodes}
                 currentDeviceId={currentDeviceId}
                 isOnline={isOnline && !simulateOffline}
                 onUpdateCodes={handleUpdateStudentCodes}
@@ -1155,9 +1284,9 @@ export default function App() {
               <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                   <span className="text-[10px] font-extrabold tracking-widest text-indigo-400 bg-indigo-950/40 px-2.5 py-1 rounded-full border border-indigo-500/10 uppercase">
-                    Portail Collègues Enseignants
+                    Portail Collègues Enseignants [BAC À SABLE]
                   </span>
-                  <h2 className="text-lg font-bold text-slate-100 mt-2">Espace Auteurs de cours & Commissions</h2>
+                  <h2 className="text-lg font-bold text-slate-100 mt-2">Espace Auteurs de cours & Commissions (Simulé)</h2>
                   <p className="text-xs text-slate-400 mt-1">
                     Les enseignants se connectent avec leur matricule pour suivre leurs commissions, demander un paiement, publier de nouveaux cours et administrer les élèves de leurs classes.
                   </p>
@@ -1171,11 +1300,11 @@ export default function App() {
               </div>
 
               <TeacherPortal
-                teachers={teachers}
-                classes={classes}
-                courses={courses}
-                studentCodes={studentCodes}
-                payoutRequests={payoutRequests}
+                teachers={sandboxTeachers}
+                classes={sandboxClasses}
+                courses={sandboxCourses}
+                studentCodes={sandboxStudentCodes}
+                payoutRequests={sandboxPayoutRequests}
                 onAddCourse={handleAddCourse}
                 onGenerateCode={handleGenerateCode}
                 onUpdateCodes={handleUpdateStudentCodes}
@@ -1191,9 +1320,9 @@ export default function App() {
               <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                   <span className="text-[10px] font-extrabold tracking-widest text-red-400 bg-red-950/40 px-2.5 py-1 rounded-full border border-red-500/10 uppercase">
-                    Direction Générale
+                    Direction Générale [BAC À SABLE]
                   </span>
-                  <h2 className="text-lg font-bold text-slate-100 mt-2">Panneau d'Administration de Référence</h2>
+                  <h2 className="text-lg font-bold text-slate-100 mt-2">Panneau d'Administration (Simulé)</h2>
                   <p className="text-xs text-slate-400 mt-1">
                     Créez des classes, enrôlez des professeurs auteurs de cours, configurez les permissions d'administration et résolvez les demandes "Payez moi" avec génération instantanée de factures PDF et remise à 0.
                   </p>
@@ -1207,13 +1336,13 @@ export default function App() {
               </div>
 
               <AdminPortal
-                classes={classes}
-                courses={courses}
-                teachers={teachers}
-                studentCodes={studentCodes}
-                payoutRequests={payoutRequests}
-                invoices={invoices}
-                superAdminCode={superAdminCode}
+                classes={sandboxClasses}
+                courses={sandboxCourses}
+                teachers={sandboxTeachers}
+                studentCodes={sandboxStudentCodes}
+                payoutRequests={sandboxPayoutRequests}
+                invoices={sandboxInvoices}
+                superAdminCode={sandboxSuperAdminCode}
                 productionLock={productionLock}
                 onAddClass={handleAddClass}
                 onDeleteClass={handleDeleteClass}
